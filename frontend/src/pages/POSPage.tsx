@@ -541,148 +541,149 @@ export const POSPage = () => {
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* === CART PANEL === */}
-                <div className={`w-full md:w-[40%] lg:w-[35%] flex flex-col bg-slate-50 h-full ${showMobileCart ? 'flex' : 'hidden md:flex'}`}>
+            {/* === CART PANEL === */}
+            <div className={`w-full md:w-[40%] lg:w-[35%] flex flex-col bg-slate-50 h-full ${showMobileCart ? 'flex' : 'hidden md:flex'}`}>
 
-                    {/* Cart Header */}
-                    <div className="h-16 flex items-center justify-between px-4 bg-white border-b border-slate-200 shrink-0">
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setShowMobileCart(false)}
-                                className="md:hidden p-2 -ml-2 text-slate-500"
-                            >
-                                <ChevronLeft size={24} />
-                            </button>
-                            <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                                <span className={`text-white text-xs px-2 py-0.5 rounded-full ${theme.bg}`}>
-                                    {cartCount}
-                                </span>
-                                Ticket Actual
-                            </h2>
-                        </div>
+                {/* Cart Header */}
+                <div className="h-16 flex items-center justify-between px-4 bg-white border-b border-slate-200 shrink-0">
+                    <div className="flex items-center gap-2">
                         <button
-                            onClick={clearCart}
-                            className="text-slate-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                            title="Cancelar venta"
+                            onClick={() => setShowMobileCart(false)}
+                            className="md:hidden p-2 -ml-2 text-slate-500"
                         >
-                            <Trash2 size={18} />
+                            <ChevronLeft size={24} />
                         </button>
-                    </div>
-
-                    {/* Cart Items */}
-                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                        {cart.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                <Scan size={48} className="mb-3 opacity-50" />
-                                <p className="text-sm">Escanee o busque un producto</p>
-                            </div>
-                        ) : (
-                            cart.map(item => (
-                                <CartItemRow
-                                    key={item.product.id}
-                                    item={item}
-                                    onUpdateQuantity={(qty) => updateQuantity(item.product.id, qty)}
-                                    theme={theme}
-                                />
-                            ))
-                        )}
-                    </div>
-
-                    {/* Cart Footer */}
-                    <div className="bg-white border-t border-slate-200 p-4 shrink-0 pb-20 md:pb-4">
-                        <div className="flex justify-between items-end mb-4">
-                            <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total</p>
-                                <p className="text-slate-400 text-xs">IVA Incluido</p>
-                            </div>
-                            <span className="text-4xl font-black text-slate-900">
-                                $ {cartTotal.toLocaleString('es-AR')}
+                        <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                            <span className={`text-white text-xs px-2 py-0.5 rounded-full ${theme.bg}`}>
+                                {cartCount}
                             </span>
-                        </div>
-
-                        <button
-                            onClick={handleOpenPayment}
-                            disabled={cart.length === 0}
-                            className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 text-white font-bold text-lg shadow-lg ${theme.bg} ${theme.hover} active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                            COBRAR (F2)
-                        </button>
-
-                        {/* Quick payment buttons */}
-                        <div className="grid grid-cols-3 gap-2 mt-3">
-                            {paymentMethods.slice(0, 3).map(method => (
-                                <button
-                                    key={method.id}
-                                    onClick={() => {
-                                        setSelectedPaymentMethod(method.id);
-                                        handleOpenPayment();
-                                    }}
-                                    disabled={cart.length === 0}
-                                    className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
-                                >
-                                    {method.code === 'EFECTIVO' && <Banknote size={18} />}
-                                    {method.code === 'DEBITO' && <CreditCard size={18} />}
-                                    {method.code === 'MERCADOPAGO' && <QrCode size={18} />}
-                                    {!['EFECTIVO', 'DEBITO', 'MERCADOPAGO'].includes(method.code) && <CreditCard size={18} />}
-                                    <span className="text-[10px] font-bold mt-1">{method.name.split(' ')[0]}</span>
-                                </button>
-                            ))}
-                        </div>
+                            Ticket Actual
+                        </h2>
                     </div>
+                    <button
+                        onClick={clearCart}
+                        className="text-slate-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                        title="Cancelar venta"
+                    >
+                        <Trash2 size={18} />
+                    </button>
                 </div>
 
-                {/* === MOBILE CART FAB === */}
-                {!showMobileCart && cart.length > 0 && (
-                    <div className="md:hidden fixed bottom-20 left-4 right-4 z-40">
-                        <button
-                            onClick={() => setShowMobileCart(true)}
-                            className={`w-full p-4 rounded-2xl shadow-xl flex items-center justify-between text-white ${theme.bg} animate-slide-up`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="bg-white/20 p-2 rounded-lg">
-                                    <ShoppingBag size={20} />
-                                </div>
-                                <div className="text-left">
-                                    <p className="font-bold text-sm">{cartCount} items</p>
-                                    <p className="text-xs opacity-80">Ver pedido</p>
-                                </div>
-                            </div>
-                            <span className="text-xl font-bold">$ {cartTotal.toLocaleString('es-AR')}</span>
-                        </button>
-                    </div>
-                )}
+                {/* Cart Items */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                    {cart.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                            <Scan size={48} className="mb-3 opacity-50" />
+                            <p className="text-sm">Escanee o busque un producto</p>
+                        </div>
+                    ) : (
+                        cart.map(item => (
+                            <CartItemRow
+                                key={item.product.id}
+                                item={item}
+                                onUpdateQuantity={(qty) => updateQuantity(item.product.id, qty)}
+                                theme={theme}
+                            />
+                        ))
+                    )}
+                </div>
 
-                {/* === PAYMENT MODAL === */}
-                {showPaymentModal && (
-                    <PaymentModal
-                        total={cartTotal}
-                        paymentMethods={paymentMethods}
-                        selectedMethod={selectedPaymentMethod}
-                        onSelectMethod={setSelectedPaymentMethod}
-                        amountTendered={amountTendered}
-                        onAmountChange={setAmountTendered}
-                        onConfirm={handleCompleteSale}
-                        onClose={() => setShowPaymentModal(false)}
-                        processing={processing}
-                        theme={theme}
-                    />
-                )}
-                {/* === TOAST === */}
-                {toast && (
-                    <div className={`fixed top-6 right-6 z-[60] flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl animate-fade-in-down ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'
-                        } text-white min-w-[320px] active:scale-95 transition-transform cursor-pointer`} onClick={() => setToast(null)}>
-                        <div className="bg-white/20 p-2 rounded-lg shrink-0">
-                            {toast.type === 'success' ? <CheckCircle size={28} /> : <AlertCircle size={28} />}
-                        </div>
+                {/* Cart Footer */}
+                <div className="bg-white border-t border-slate-200 p-4 shrink-0 pb-20 md:pb-4">
+                    <div className="flex justify-between items-end mb-4">
                         <div>
-                            <p className="font-bold text-lg leading-tight">{toast.message}</p>
-                            {toast.subtext && <p className="text-white/90 text-sm mt-1">{toast.subtext}</p>}
+                            <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total</p>
+                            <p className="text-slate-400 text-xs">IVA Incluido</p>
                         </div>
+                        <span className="text-4xl font-black text-slate-900">
+                            $ {cartTotal.toLocaleString('es-AR')}
+                        </span>
                     </div>
-                )}
+
+                    <button
+                        onClick={handleOpenPayment}
+                        disabled={cart.length === 0}
+                        className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 text-white font-bold text-lg shadow-lg ${theme.bg} ${theme.hover} active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                        COBRAR (F2)
+                    </button>
+
+                    {/* Quick payment buttons */}
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                        {paymentMethods.slice(0, 3).map(method => (
+                            <button
+                                key={method.id}
+                                onClick={() => {
+                                    setSelectedPaymentMethod(method.id);
+                                    handleOpenPayment();
+                                }}
+                                disabled={cart.length === 0}
+                                className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+                            >
+                                {method.code === 'EFECTIVO' && <Banknote size={18} />}
+                                {method.code === 'DEBITO' && <CreditCard size={18} />}
+                                {method.code === 'MERCADOPAGO' && <QrCode size={18} />}
+                                {!['EFECTIVO', 'DEBITO', 'MERCADOPAGO'].includes(method.code) && <CreditCard size={18} />}
+                                <span className="text-[10px] font-bold mt-1">{method.name.split(' ')[0]}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
-            );
+
+            {/* === MOBILE CART FAB === */}
+            {!showMobileCart && cart.length > 0 && (
+                <div className="md:hidden fixed bottom-20 left-4 right-4 z-40">
+                    <button
+                        onClick={() => setShowMobileCart(true)}
+                        className={`w-full p-4 rounded-2xl shadow-xl flex items-center justify-between text-white ${theme.bg} animate-slide-up`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white/20 p-2 rounded-lg">
+                                <ShoppingBag size={20} />
+                            </div>
+                            <div className="text-left">
+                                <p className="font-bold text-sm">{cartCount} items</p>
+                                <p className="text-xs opacity-80">Ver pedido</p>
+                            </div>
+                        </div>
+                        <span className="text-xl font-bold">$ {cartTotal.toLocaleString('es-AR')}</span>
+                    </button>
+                </div>
+            )}
+
+            {/* === PAYMENT MODAL === */}
+            {showPaymentModal && (
+                <PaymentModal
+                    total={cartTotal}
+                    paymentMethods={paymentMethods}
+                    selectedMethod={selectedPaymentMethod}
+                    onSelectMethod={setSelectedPaymentMethod}
+                    amountTendered={amountTendered}
+                    onAmountChange={setAmountTendered}
+                    onConfirm={handleCompleteSale}
+                    onClose={() => setShowPaymentModal(false)}
+                    processing={processing}
+                    theme={theme}
+                />
+            )}
+            {/* === TOAST === */}
+            {toast && (
+                <div className={`fixed top-6 right-6 z-[60] flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl animate-fade-in-down ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'
+                    } text-white min-w-[320px] active:scale-95 transition-transform cursor-pointer`} onClick={() => setToast(null)}>
+                    <div className="bg-white/20 p-2 rounded-lg shrink-0">
+                        {toast.type === 'success' ? <CheckCircle size={28} /> : <AlertCircle size={28} />}
+                    </div>
+                    <div>
+                        <p className="font-bold text-lg leading-tight">{toast.message}</p>
+                        {toast.subtext && <p className="text-white/90 text-sm mt-1">{toast.subtext}</p>}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 export default POSPage;
