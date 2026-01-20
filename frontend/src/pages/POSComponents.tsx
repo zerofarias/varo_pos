@@ -166,14 +166,14 @@ export const CartItemRow = ({
     const originalSubtotal = item.quantity * item.product.salePrice;
 
     return (
-        <div className={`p-3 rounded-xl shadow-sm border flex justify-between items-center transition-all ${hasPromo ? 'bg-indigo-50/50 border-indigo-200 ring-1 ring-indigo-100' : 'bg-white border-slate-200'
+        <div className={`p-3 rounded-xl shadow-sm border flex justify-between items-center transition-all ${hasPromo ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-amber-200 ring-1 ring-amber-200' : 'bg-white border-slate-200'
             }`}>
             <div className="flex-1 min-w-0 pr-2">
                 <div className="flex items-center gap-2 mb-0.5">
                     <p className="font-medium text-slate-800 truncate text-sm">{item.product.name}</p>
                     {hasPromo && (
-                        <span className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">
-                            <Tag size={10} /> {item.promoName?.substring(0, 15)}
+                        <span className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200">
+                            <Tag size={10} className="fill-amber-500 text-amber-600" /> {item.promoName?.substring(0, 15)}
                         </span>
                     )}
                 </div>
@@ -187,7 +187,7 @@ export const CartItemRow = ({
                     )}
                 </p>
                 {hasPromo && (
-                    <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                    <p className="text-[10px] text-green-600 font-bold mt-0.5 bg-green-50 inline-block px-1 rounded border border-green-100">
                         Ahorro: -${item.promoDiscount?.toLocaleString('es-AR')}
                     </p>
                 )}
@@ -195,7 +195,7 @@ export const CartItemRow = ({
 
             <div className="flex items-center gap-3">
                 <div className="text-right">
-                    <span className={`font-bold text-lg ${hasPromo ? 'text-indigo-700' : 'text-slate-900'}`}>
+                    <span className={`font-bold text-lg ${hasPromo ? 'text-amber-700' : 'text-slate-900'}`}>
                         $ {item.subtotal.toLocaleString('es-AR')}
                     </span>
                 </div>

@@ -51,8 +51,8 @@ const CreatePromotionModal = ({ onClose, onSuccess, initialData }: Props) => {
                 setDaysOfWeek(initialData.daysOfWeek || '0,1,2,3,4,5,6');
                 setPaymentMethod(initialData.paymentMethodId || null);
 
-                if (initialData.buyQty) setBuyQty(initialData.buyQty);
-                if (initialData.payQty) setPayQty(initialData.payQty);
+                if (initialData.buyQuantity) setBuyQty(initialData.buyQuantity);
+                if (initialData.payQuantity) setPayQty(initialData.payQuantity);
                 if (initialData.discountPercent) setDiscountPercent(initialData.discountPercent);
                 if (initialData.fixedPrice) setFixedPrice(initialData.fixedPrice);
 
@@ -101,8 +101,8 @@ const CreatePromotionModal = ({ onClose, onSuccess, initialData }: Props) => {
                 endDate,
                 daysOfWeek,
                 // Reglas según tipo
-                buyQty: type === 'N_X_M' ? buyQty : undefined,
-                payQty: type === 'N_X_M' ? payQty : undefined,
+                buyQuantity: type === 'N_X_M' ? buyQty : undefined,
+                payQuantity: type === 'N_X_M' ? payQty : undefined,
                 discountPercent: type === 'PERCENTAGE' ? discountPercent : undefined,
                 fixedPrice: type === 'FIXED_PRICE' ? fixedPrice : undefined,
                 // Pago

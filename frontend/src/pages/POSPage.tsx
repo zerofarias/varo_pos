@@ -135,11 +135,29 @@ export const POSPage = () => {
                 limit: 50, // Traer solo 50 resultados para mantener UI fluida
                 active: true
             });
-            setProducts(res.data);
+
+            let resultProducts = res.data;
+
+            // Si estamos en la vista default (sin filtros), asegurar que traemos los favoritos
+            if (!term && !category) {
+                try {
+                    const favs = await productService.getAll({ favorites: true, active: true, limit: 100 });
+                    // Merge favorites into results if not present
+                    favs.data.forEach(fav => {
+                        if (!resultProducts.find(p => p.id === fav.id)) {
+                            resultProducts.push(fav);
+                        }
+                    });
+                } catch (e) {
+                    console.warn('Could not load extra favorites', e);
+                }
+            }
+
+            setProducts(resultProducts);
 
             // Buscar plantilla genérica si no la tenemos
             if (!genericProductTemplate && term === '') {
-                const generic = res.data.find(p => p.sku === 'VARIOS');
+                const generic = resultProducts.find(p => p.sku === 'VARIOS');
                 if (generic) setGenericProductTemplate(generic);
             }
         } catch (err) {

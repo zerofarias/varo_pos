@@ -18,6 +18,7 @@ const productController = {
                 categoryId,
                 lowStock,
                 featured,
+                favorites,
                 active = 'true'
             } = req.query;
 
@@ -30,6 +31,7 @@ const productController = {
             if (active === 'true') where.isActive = true;
             if (categoryId) where.categoryId = categoryId;
             if (featured === 'true') where.isFeatured = true;
+            if (favorites === 'true') where.isFavorite = true;
 
             if (search) {
                 where.OR = [
@@ -48,7 +50,20 @@ const productController = {
                 prisma.product.findMany({
                     where,
                     include: {
-                        category: { select: { id: true, name: true, color: true } }
+                        category: { select: { id: true, name: true, color: true } },
+                        promotions: {
+                            where: {
+                                promotion: {
+                                    isActive: true,
+                                    endDate: { gte: new Date() }
+                                }
+                            },
+                            include: {
+                                promotion: {
+                                    select: { id: true, name: true, type: true }
+                                }
+                            }
+                        }
                     },
                     orderBy: [
                         { isFeatured: 'desc' },

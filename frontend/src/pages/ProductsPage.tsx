@@ -364,7 +364,11 @@ const ProductCard = ({
     };
 
     return (
-        <div className={`bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow ${product.isFeatured ? 'border-amber-300 bg-gradient-to-br from-white to-amber-50' : 'border-slate-200'
+        <div className={`bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow ${product.promotions && product.promotions.length > 0
+                ? 'border-purple-300 bg-purple-50/30'
+                : product.isFeatured
+                    ? 'border-amber-300 bg-gradient-to-br from-white to-amber-50'
+                    : 'border-slate-200'
             }`}>
             <div className="flex justify-between items-start mb-3">
                 <div className="flex-1 min-w-0 pr-2">
@@ -373,6 +377,12 @@ const ProductCard = ({
                             <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold">
                                 <Tag size={10} />
                                 OFERTA
+                            </span>
+                        )}
+                        {product.promotions && product.promotions.length > 0 && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold border border-purple-200">
+                                <Tag size={10} className="fill-purple-500" />
+                                {product.promotions[0].promotion.name}
                             </span>
                         )}
                         {product.isFavorite && (

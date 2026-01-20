@@ -19,14 +19,19 @@ const promoController = {
                 startTime,
                 endTime,
                 // Reglas
-                buyQty,      // N
-                payQty,      // M
+                buyQty,      // N (Legacy support)
+                payQty,      // M (Legacy support)
+                buyQuantity, // New standard
+                payQuantity, // New standard
                 discountPercent,
                 fixedPrice,
                 paymentMethodId,
                 // Productos iniciales
                 productIds = []
             } = req.body;
+
+            const finalBuyQty = buyQuantity || buyQty;
+            const finalPayQty = payQuantity || payQty;
 
             // Transacción para asegurar integridad
             const result = await prisma.$transaction(async (tx) => {
@@ -48,8 +53,8 @@ const promoController = {
                         isActive: true, // Por defecto activa
 
                         // Campos específicos
-                        buyQuantity: buyQty ? parseInt(buyQty) : null,
-                        payQuantity: payQty ? parseInt(payQty) : null,
+                        buyQuantity: finalBuyQty ? parseInt(finalBuyQty) : null,
+                        payQuantity: finalPayQty ? parseInt(finalPayQty) : null,
                         discountPercent: discountPercent ? parseFloat(discountPercent) : null,
                         fixedPrice: fixedPrice ? parseFloat(fixedPrice) : null,
 
@@ -101,9 +106,6 @@ const promoController = {
             const promos = await prisma.promotion.findMany({
                 where,
                 include: {
-                    _count: {
-                        select: { products: true }
-                    },
                     products: {
                         select: { productId: true }
                     }

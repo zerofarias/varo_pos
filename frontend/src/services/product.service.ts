@@ -12,6 +12,7 @@ interface ProductFilters {
     categoryId?: string;
     lowStock?: boolean;
     featured?: boolean;
+    favorites?: boolean;
     active?: boolean;
 }
 

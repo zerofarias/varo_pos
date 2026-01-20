@@ -80,12 +80,12 @@ const applyPromotionsLogic = (items: CartItem[], promotions: Promotion[]): CartI
         }
 
         // 2. TIPO NxM
-        else if (promo.type === 'N_X_M' && promo.buyQty && promo.payQty) {
+        else if (promo.type === 'N_X_M' && promo.buyQuantity && promo.payQuantity) {
             const totalQty = eligibleItems.reduce((acc, item) => acc + item.quantity, 0);
 
-            if (totalQty >= promo.buyQty) {
-                const sets = Math.floor(totalQty / promo.buyQty);
-                const freeCount = sets * (promo.buyQty - promo.payQty);
+            if (totalQty >= promo.buyQuantity) {
+                const sets = Math.floor(totalQty / promo.buyQuantity);
+                const freeCount = sets * (promo.buyQuantity - promo.payQuantity);
 
                 // Descontar los más baratos
                 // Expandir a unidades individuales

@@ -83,6 +83,7 @@ export interface Product {
     stockStatus: 'ok' | 'low' | 'critical' | 'out';
     daysUntilEmpty?: number;
     databaseId?: string; // ID real de DB para genéricos clonados
+    promotions?: { promotion: { id: string; name: string; type: string } }[];
 }
 
 export interface Category {
@@ -311,8 +312,8 @@ export interface Promotion {
     daysOfWeek?: string; // "0,1,2,3,4,5,6"
 
     // Reglas
-    buyQty?: number;
-    payQty?: number;
+    buyQuantity?: number;
+    payQuantity?: number;
     discountPercent?: number;
     fixedPrice?: number;
 
