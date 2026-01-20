@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import {
     Search, Plus, Edit, Package,
-    AlertTriangle, Tag, ChevronLeft, ChevronRight, Sparkles
+    AlertTriangle, Tag, ChevronLeft, ChevronRight, Sparkles, Star
 } from 'lucide-react';
 import { productService } from '@/services';
 import { useConfigStore, themeColors } from '@/stores/configStore';
@@ -170,6 +170,21 @@ export const ProductsPage = () => {
         }
     };
 
+    const handleToggleFavorite = async (product: Product) => {
+        try {
+            const newValue = !product.isFavorite;
+            // Optimistic update
+            setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isFavorite: newValue } : p));
+
+            await productService.update(product.id, { isFavorite: newValue });
+        } catch (error) {
+            console.error('Error toggling favorite', error);
+            // Revert
+            setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isFavorite: !product.isFavorite } : p));
+            alert('No se pudo actualizar favorito');
+        }
+    };
+
     return (
         <div className="h-full flex flex-col bg-slate-50">
             {/* Header */}
@@ -261,6 +276,7 @@ export const ProductsPage = () => {
                                     product={product}
                                     theme={theme}
                                     onEdit={handleEdit}
+                                    onToggleFav={handleToggleFavorite}
                                 />
                             ))}
                         </div>
@@ -332,11 +348,13 @@ const StatCard = ({ label, value, color }: { label: string; value: number; color
 const ProductCard = ({
     product,
     theme,
-    onEdit
+    onEdit,
+    onToggleFav
 }: {
     product: Product;
     theme: typeof themeColors['indigo'];
     onEdit: (p: Product) => void;
+    onToggleFav: (p: Product) => void;
 }) => {
     const stockColors = {
         ok: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -349,12 +367,18 @@ const ProductCard = ({
         <div className={`bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow ${product.isFeatured ? 'border-amber-300 bg-gradient-to-br from-white to-amber-50' : 'border-slate-200'
             }`}>
             <div className="flex justify-between items-start mb-3">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pr-2">
                     <div className="flex items-center gap-2 mb-1">
                         {product.isFeatured && (
                             <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold">
                                 <Tag size={10} />
                                 OFERTA
+                            </span>
+                        )}
+                        {product.isFavorite && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">
+                                <Star size={10} className="fill-current" />
+                                FAVORITO
                             </span>
                         )}
                     </div>
@@ -363,12 +387,24 @@ const ProductCard = ({
                         {product.sku} {product.barcode && `• ${product.barcode}`}
                     </p>
                 </div>
-                <button
-                    onClick={() => onEdit(product)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"
-                >
-                    <Edit size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggleFav(product); }}
+                        className={`p-1.5 rounded-lg transition-colors ${product.isFavorite
+                            ? 'text-amber-400 hover:text-amber-500 hover:bg-amber-50'
+                            : 'text-slate-300 hover:text-amber-400 hover:bg-slate-100'}`}
+                        title={product.isFavorite ? "Quitar de favoritos" : "Añadir a favoritos"}
+                    >
+                        <Star size={18} className={product.isFavorite ? "fill-current" : ""} />
+                    </button>
+                    <button
+                        onClick={() => onEdit(product)}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"
+                        title="Editar producto"
+                    >
+                        <Edit size={18} />
+                    </button>
+                </div>
             </div>
 
             <div className="flex items-center justify-between mb-4">
