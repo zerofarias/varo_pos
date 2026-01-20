@@ -152,6 +152,7 @@ model Product {
   isActive        Boolean   @default(true) @map("is_active")
   isFeatured      Boolean   @default(false) @map("is_featured")
   isGeneric       Boolean   @default(false) @map("is_generic")
+  isFavorite      Boolean   @default(false) @map("is_favorite")
   
   // Imagen
   imageUrl        String?   @map("image_url")

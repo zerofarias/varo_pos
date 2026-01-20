@@ -75,6 +75,7 @@ export interface Product {
     isService: boolean;
     isActive: boolean;
     isFeatured: boolean;
+    isFavorite: boolean;
     isGeneric?: boolean;        // Producto genérico "Varios"
     imageUrl?: string;
     taxRate: number;
