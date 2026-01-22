@@ -19,6 +19,8 @@ import type { Product, Category, PaymentMethod } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { useCashStore } from '@/stores/cashStore';
 import { ProductRow, ProductCard, CartItemRow, EmptyState, PaymentModal, QuickAccessGrid } from './POSComponents';
+import ReceiptModal from '@/components/modals/ReceiptModal';
+import CustomerSearchModal from '@/components/modals/CustomerSearchModal';
 
 export const POSPage = () => {
     const { themeColor } = useConfigStore();
@@ -45,7 +47,9 @@ export const POSPage = () => {
         clearCart,
         getTotal,
         getItemCount,
-        loadPromotions
+        loadPromotions,
+        customer,
+        setCustomer
     } = useCartStore();
 
     // State
@@ -61,8 +65,12 @@ export const POSPage = () => {
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
     const [amountTendered, setAmountTendered] = useState('');
     const [processing, setProcessing] = useState(false);
+    const [initialFiscal, setInitialFiscal] = useState(false);
     const [genericProductTemplate, setGenericProductTemplate] = useState<Product | null>(null);
     const [toast, setToast] = useState<{ message: string; subtext?: string; type: 'success' | 'error' } | null>(null);
+    const [showReceipt, setShowReceipt] = useState(false);
+    const [lastSale, setLastSale] = useState<any>(null);
+    const [showCustomerModal, setShowCustomerModal] = useState(false);
 
     // Keyboard navigation state
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
@@ -101,17 +109,20 @@ export const POSPage = () => {
                 productService.getCategories(),
                 saleService.getPaymentMethods(),
             ]);
-            setCategories(categoriesRes);
-            setPaymentMethods(methodsRes);
 
-            if (methodsRes.length > 0) {
+            const safeMethods = Array.isArray(methodsRes) ? methodsRes : (methodsRes as any).data || [];
+
+            setCategories(categoriesRes);
+            setPaymentMethods(safeMethods);
+
+            if (safeMethods.length > 0) {
                 const defaultId = useConfigStore.getState().defaultPaymentMethodId;
-                const defaultMethod = methodsRes.find(m => m.id === defaultId);
+                const defaultMethod = safeMethods.find((m: any) => m.id === defaultId);
 
                 if (defaultMethod) {
                     setSelectedPaymentMethod(defaultMethod.id);
                 } else {
-                    setSelectedPaymentMethod(methodsRes[0].id);
+                    setSelectedPaymentMethod(safeMethods[0].id);
                 }
             }
 
@@ -307,7 +318,12 @@ export const POSPage = () => {
             // F2 - Open payment
             if (e.key === 'F2' && cart.length > 0) {
                 e.preventDefault();
-                handleOpenPayment();
+                handleOpenPayment(false);
+            }
+            // F4 - Open payment (Fiscal)
+            if (e.key === 'F4' && cart.length > 0) {
+                e.preventDefault();
+                handleOpenPayment(true);
             }
             // Escape - Close modals
             if (e.key === 'Escape') {
@@ -320,6 +336,23 @@ export const POSPage = () => {
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
     }, [cart]);
 
+    // Auto-scroll to selected item
+    useEffect(() => {
+        if (selectedIndex >= 0 && filteredProducts.length > 0) {
+            // Intentar encontrar en desktop (row) o mobile (card)
+            // Nota: Usamos IDs únicos para desktop y mobile
+            const element = document.getElementById(`product-row-${selectedIndex}`) ||
+                document.getElementById(`product-card-${selectedIndex}`);
+
+            if (element) {
+                element.scrollIntoView({
+                    block: 'nearest',
+                    behavior: 'smooth'
+                });
+            }
+        }
+    }, [selectedIndex, filteredProducts]);
+
     const handleAddToCart = (product: Product) => {
         addItem(product);
         setSearchTerm('');
@@ -327,8 +360,9 @@ export const POSPage = () => {
         searchInputRef.current?.focus();
     };
 
-    const handleOpenPayment = () => {
+    const handleOpenPayment = (fiscal: boolean = false) => {
         if (cart.length === 0) return;
+        setInitialFiscal(fiscal);
         setAmountTendered(getTotal().toString());
         setShowPaymentModal(true);
     };
@@ -338,7 +372,7 @@ export const POSPage = () => {
         setTimeout(() => setToast(null), 3000); // Desaparece en 3 segundos
     };
 
-    const handleCompleteSale = async (finalTotalProp?: number) => {
+    const handleCompleteSale = async (finalTotalProp?: number, isFiscalArg: boolean = false) => {
         const baseTotal = getTotal();
         // Si viene del modal con recargo, usar ese. Si no (ej pago rápido), calcular base.
         // Pero pago rápido debería soportar recargo también. Por ahora asumimos que payment modal es el camino.
@@ -385,11 +419,24 @@ export const POSPage = () => {
                 // Como itemsToSend no son exactamente CartItems del store, esperamos que funcione.
             }
 
-            const saleData = saleService.cartToSaleData(
+            const saleData: any = saleService.cartToSaleData(
                 itemsToSend,
                 [{ paymentMethodId: selectedPaymentMethod, amount: finalTotal }]
             );
-            const newSale = await saleService.create(saleData);
+
+            // Agregar flag fiscal
+            if (isFiscalArg) {
+                saleData.isFiscal = true;
+                // Por defecto Factura B (Consumidor Final)
+                // Idealmente el backend lo deduce o se selecciona Customer CUIT "A"
+                saleData.invoiceType = customer?.taxCondition === 'RESPONSABLE_INSCRIPTO' ? 'A' : 'B';
+            }
+            if (customer) {
+                saleData.customerId = customer.id;
+            }
+
+            const response = await saleService.create(saleData);
+            const newSale = response.data; // Extraer la venta real
 
             const change = method?.code === 'EFECTIVO' ? tendered - finalTotal : 0;
             const methodName = method?.name || 'Pago';
@@ -403,6 +450,24 @@ export const POSPage = () => {
                 : details;
 
             showToast(`¡Venta ${newSale.saleNumber} Exitosa!`, subtext, 'success');
+
+            // --- MOSTRAR TICKET ---
+            setLastSale(newSale); // Guardar venta completa
+            const shouldPrint = isFiscalArg
+                ? useConfigStore.getState().printOnFiscal
+                : useConfigStore.getState().printOnSale;
+
+            if (shouldPrint) {
+                setShowReceipt(true);
+            }
+            // ----------------------
+
+            if (newSale.afipStatus === 'APPROVED') {
+                showToast('Facturada OK', `CAE: ${(newSale as any).cae || (newSale as any).afipCae}`, 'success');
+            } else if (newSale.afipError) {
+                showToast('Facturación Fallida', 'Venta registrada pero AFIP falló', 'error');
+            }
+
         } catch (error: any) {
             showToast('Error', error.response?.data?.error || 'No se pudo registrar la venta', 'error');
         } finally {
@@ -521,6 +586,7 @@ export const POSPage = () => {
                                                         theme={theme}
                                                         isSelected={index === selectedIndex}
                                                         hasPromotion={product.isFeatured}
+                                                        domId={`product-row-${index}`}
                                                     />
                                                 ))}
                                             </tbody>
@@ -538,6 +604,7 @@ export const POSPage = () => {
                                                 theme={theme}
                                                 isSelected={index === selectedIndex}
                                                 hasPromotion={product.isFeatured}
+                                                domId={`product-card-${index}`}
                                             />
                                         ))}
                                     </div>
@@ -620,22 +687,34 @@ export const POSPage = () => {
                         </span>
                     </div>
 
+                    {/* Customer Selector */}
                     <button
-                        onClick={handleOpenPayment}
+                        onClick={() => setShowCustomerModal(true)}
+                        className="w-full mb-3 py-2 px-3 rounded-lg border border-dashed border-slate-300 text-slate-500 text-sm flex items-center justify-between hover:bg-slate-50 transition-colors"
+                    >
+                        <span className="flex items-center gap-2">
+                            <User size={16} />
+                            {customer ? ((customer as any).businessName || `${customer.firstName} ${customer.lastName}`) : 'CONSUMIDOR FINAL'}
+                        </span>
+                        <span className="text-blue-600 font-bold text-xs">{customer ? 'CAMBIAR' : 'SELECCIONAR'}</span>
+                    </button>
+
+                    <button
+                        onClick={() => handleOpenPayment(false)}
                         disabled={cart.length === 0}
                         className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 text-white font-bold text-lg shadow-lg ${theme.bg} ${theme.hover} active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                        COBRAR (F2)
+                        COBRAR (F2) / FISCAL (F4)
                     </button>
 
                     {/* Quick payment buttons */}
                     <div className="grid grid-cols-3 gap-2 mt-3">
-                        {paymentMethods.slice(0, 3).map(method => (
+                        {Array.isArray(paymentMethods) && paymentMethods.slice(0, 3).map(method => (
                             <button
                                 key={method.id}
                                 onClick={() => {
                                     setSelectedPaymentMethod(method.id);
-                                    handleOpenPayment();
+                                    handleOpenPayment(false);
                                 }}
                                 disabled={cart.length === 0}
                                 className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
@@ -675,6 +754,7 @@ export const POSPage = () => {
             {/* === PAYMENT MODAL === */}
             {showPaymentModal && (
                 <PaymentModal
+                    initialIsFiscal={initialFiscal}
                     total={cartTotal}
                     paymentMethods={paymentMethods}
                     selectedMethod={selectedPaymentMethod}
@@ -687,6 +767,28 @@ export const POSPage = () => {
                     theme={theme}
                 />
             )}
+
+            {/* === RECEIPT MODAL === */}
+            {showReceipt && lastSale && (
+                <ReceiptModal
+                    sale={lastSale}
+                    onClose={() => setShowReceipt(false)}
+                    theme={theme}
+                />
+            )}
+
+            {/* === CUSTOMER SEARCH MODAL === */}
+            {showCustomerModal && (
+                <CustomerSearchModal
+                    onSelect={(c) => {
+                        setCustomer(c);
+                        setShowCustomerModal(false);
+                    }}
+                    onClose={() => setShowCustomerModal(false)}
+                    theme={theme}
+                />
+            )}
+
             {/* === TOAST === */}
             {toast && (
                 <div className={`fixed top-6 right-6 z-[60] flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl animate-fade-in-down ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'

@@ -25,7 +25,7 @@ model User {
   firstName         String    @map("first_name")
   lastName          String    @map("last_name")
   phone             String?
-  avatar            String?
+  avatar            String?   @db.LongText
   isActive          Boolean   @default(true) @map("is_active")
   
   // Relaciones
@@ -345,7 +345,14 @@ model Sale {
   
   // Tipo de comprobante (Facturación Híbrida)
   documentType    String    @default("TICKET_X") @map("document_type") // TICKET_X, FACTURA_A, FACTURA_B, FACTURA_C, NOTA_CREDITO_A, NOTA_CREDITO_B, NOTA_CREDITO_C
-  fiscalNumber    String?   @map("fiscal_number") // CAE para facturas electrónicas
+  fiscalNumber    String?   @map("fiscal_number") // Número de comprobante oficial (0001-00000001)
+
+  // Campos ARCA / AFIP
+  cae             String?   @map("afip_cae")
+  caeExpiration   DateTime? @map("afip_cae_expiration")
+  qrData          String?   @db.Text @map("afip_qr_data") // Data JSON codificada para el QR
+  afipError       String?   @db.Text @map("afip_error")   // Error detallado si falla la facturación
+  afipStatus      String?   @map("afip_status") // PENDING, APPROVED, REJECTED
   
   // Montos (positivos para ventas, negativos para NC)
   subtotal        Decimal   @db.Decimal(12, 2)

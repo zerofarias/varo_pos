@@ -16,8 +16,10 @@ import { ReportsPage } from '@/pages/ReportsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { CashRegisterPage } from '@/pages/CashRegisterPage';
 import { CashDashboardPage } from '@/pages/CashDashboardPage';
+import { ShiftDetailsPage } from '@/pages/ShiftDetailsPage';
 import { PromotionsPage } from '@/pages/PromotionsPage';
 import { StatsPage } from '@/pages/StatsPage';
+import { UsersPage } from '@/pages/UsersPage';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -73,8 +75,10 @@ function App() {
                 <Route path="customers" element={<CustomersPage />} />
                 <Route path="cash" element={<CashRegisterPage />} />
                 <Route path="cash-dashboard" element={<CashDashboardPage />} />
+                <Route path="cash-details/:id" element={<ShiftDetailsPage />} />
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="stats" element={<StatsPage />} />
+                <Route path="users" element={<UsersPage />} />
                 <Route path="settings" element={<SettingsPage />} />
             </Route>
 

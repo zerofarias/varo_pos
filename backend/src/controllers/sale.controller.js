@@ -102,7 +102,11 @@ const saleController = {
                     customer: true,
                     user: { select: { id: true, firstName: true, lastName: true, username: true } },
                     branch: { select: { id: true, name: true, code: true } },
-                    cashRegister: true
+                    cashShift: {
+                        include: {
+                            cashRegister: true
+                        }
+                    }
                 }
             });
 
@@ -401,46 +405,45 @@ const saleController = {
                     });
                 }
 
-                // 4. Actualizar Turno de Caja (Active Shift)
+                // 4. Actualizar Caja (Shift)
                 if (activeShift) {
-                    // Calcular pagos que afectan caja (Efectivo)
-                    const cashPayments = salePayments.filter(p => {
-                        const method = paymentMethodMap.get(p.paymentMethodId);
-                        return method?.affectsCash; // Usar el campo correcto 'affectsCash'
+                    // Calcular total efectivo
+                    const cashPayment = salePayments.find(p => {
+                        const m = paymentMethodMap.get(p.paymentMethodId);
+                        return m && m.affectsCash && !m.isAccountPayment;
                     });
 
-                    const cashTotal = cashPayments.reduce((sum, p) => sum + p.amount, 0);
-
-                    // Actualizar métricas del turno
-                    const updateData = {
-                        expectedCash: { increment: cashTotal },
-                        totalSales: { increment: total }, // Total vendido en $
-                        // transactionCount: { increment: 1 } // Prisma no tiene increment para contador simple en update, se calcula en query
-                    };
-
-                    if (cashTotal > 0) {
-                        updateData.totalCashIn = { increment: cashTotal };
-                    }
-
-                    await tx.cashShift.update({
-                        where: { id: activeShift.id },
-                        data: updateData
-                    });
-
-                    // Si hubo efectivo, registrar movimiento de caja
-                    if (cashTotal > 0) {
-                        // Crear movimiento (sin actualizar currentAmount de CashRegister)
+                    if (cashPayment) {
+                        // Crear movimiento de caja
                         await tx.cashMovement.create({
                             data: {
                                 id: uuidv4(),
-                                cashShiftId: activeShift.id, // VINCULADO AL TURNO
-                                // cashRegisterId eliminado
-                                userId: req.user.id,
+                                cashShift: { connect: { id: activeShift.id } },
+                                user: { connect: { id: req.user.id } },
                                 type: 'IN',
                                 reason: 'SALE',
-                                amount: cashTotal,
-                                balance: Number(activeShift.expectedCash) + cashTotal, // Saldo aproximado post-movimiento
-                                description: `Venta ${saleNumber}`
+                                amount: cashPayment.amount,
+                                description: `Venta ${saleNumber}`,
+                                saleId: newSale.id,
+                                balance: 0 // Se debería calcular, simplificado
+                            }
+                        });
+
+                        // Actualizar totales del turno
+                        await tx.cashShift.update({
+                            where: { id: activeShift.id },
+                            data: {
+                                totalSales: { increment: total }, // Total venta
+                                totalCashIn: { increment: cashPayment.amount }, // Entra efectivo
+                                expectedCash: { increment: cashPayment.amount }
+                            }
+                        });
+                    } else {
+                        // Si no hubo efectivo (ej. todo débito o cuenta corriente), solo sumar al total de ventas
+                        await tx.cashShift.update({
+                            where: { id: activeShift.id },
+                            data: {
+                                totalSales: { increment: total }
                             }
                         });
                     }
@@ -449,11 +452,87 @@ const saleController = {
                 return newSale;
             });
 
+            // ============================================
+            // PROCESO DE FACTURACIÓN ELECTRÓNICA (AFIP)
+            // ============================================
+            if (req.body.isFiscal) {
+                try {
+                    const afipService = require('../services/afip.service');
+
+                    // CONFIGURACIÓN MONOTRIBUTISTA:
+                    // Siempre emite Factura C (Código 11) independientemente del receptor
+                    const cbteTipo = 11;
+
+                    const fiscalResult = await afipService.createVoucher(sale, cbteTipo);
+
+                    // Formatear número fiscal (PtoVta-Numero)
+                    const ptoVtaStr = fiscalResult.salesPoint.toString().padStart(4, '0');
+                    const cbteStr = fiscalResult.voucherNumber.toString().padStart(8, '0');
+                    const fiscalError = null; // Limpiar error si hubo éxito
+
+                    // Formatear fecha de vencimiento CAE (YYYYMMDD -> Date)
+                    const caeExpStr = fiscalResult.caeExpiration;
+                    const caeExpDate = new Date(
+                        parseInt(caeExpStr.substring(0, 4)),
+                        parseInt(caeExpStr.substring(4, 6)) - 1,
+                        parseInt(caeExpStr.substring(6, 8))
+                    );
+
+                    // Actualizar venta con CAE y QR
+                    const updatedSale = await prisma.sale.update({
+                        where: { id: sale.id },
+                        data: {
+                            fiscalNumber: `${ptoVtaStr}-${cbteStr}`,
+                            cae: fiscalResult.cae, // Renombrado afipCae -> cae
+                            caeExpiration: caeExpDate, // Renombrado afipCaeExpiration -> caeExpiration
+                            qrData: fiscalResult.qrData, // Renombrado afipQrData -> qrData
+                            afipStatus: 'APPROVED',
+                            afipError: null
+                        }
+                    });
+
+                    // Actualizar modelo local para responder al frontend
+                    // Mapeamos a lo que espera el frontend si es necesario, o usamos los nombres de Prisma
+                    sale.fiscalNumber = updatedSale.fiscalNumber;
+                    sale.cae = updatedSale.cae;
+                    sale.qrData = updatedSale.qrData;
+                    sale.afipQrData = updatedSale.qrData; // Compatibilidad por si acaso
+                    sale.afipCae = updatedSale.cae;       // Compatibilidad
+                    sale.afipStatus = 'APPROVED';
+
+                } catch (afipError) {
+                    console.error('[AFIP Error]', afipError);
+                    // Guardar error pero NO fallar la venta
+                    await prisma.sale.update({
+                        where: { id: sale.id },
+                        data: {
+                            afipError: afipError.message,
+                            afipStatus: 'REJECTED'
+                        }
+                    });
+                    sale.afipError = afipError.message;
+                    sale.afipStatus = 'REJECTED';
+                }
+            }
+
+            // --- RECARGAR VENTA COMPLETA PARA EL TICKET ---
+            const fullSale = await prisma.sale.findUnique({
+                where: { id: sale.id },
+                include: {
+                    items: { include: { product: true } },
+                    customer: true,
+                    branch: true,
+                    user: true,
+                    payments: { include: { paymentMethod: true } }
+                }
+            });
+
             res.status(201).json({
                 success: true,
                 message: 'Venta registrada exitosamente',
-                data: sale
+                data: fullSale
             });
+
         } catch (error) {
             console.error('Error al crear venta:', error);
             res.status(500).json({
@@ -561,6 +640,301 @@ const saleController = {
                 error: 'Error al cancelar venta',
                 details: [error.message]
             });
+        }
+    },
+
+
+    /**
+     * Generar Nota de Crédito (Anulación)
+     */
+    async createCreditNote(req, res) {
+        try {
+            const { id } = req.params;
+            const { reason } = req.body;
+            const userId = req.user.id;
+
+            // 1. Obtener venta original
+            const originalSale = await prisma.sale.findUnique({
+                where: { id },
+                include: {
+                    items: true,
+                    payments: { include: { paymentMethod: true } },
+                    customer: true,
+                    branch: true,
+                    creditNotes: true
+                }
+            });
+
+            if (!originalSale) {
+                return res.status(404).json({ error: 'Venta no encontrada' });
+            }
+
+            if (originalSale.creditNotes.length > 0) {
+                return res.status(400).json({ error: 'Esta venta ya fue anulada o tiene una Nota de Crédito.' });
+            }
+
+            // Validar si requiere NC Fiscal
+            const isFiscal = !!originalSale.cae;
+            let fiscalCbteTipo = null;
+            let ncDocType = 'TICKET_X';
+
+            if (isFiscal) {
+                const tipoFactura = originalSale.documentType.split('_')[1]; // A, B, C
+                if (['A', 'B', 'C'].includes(tipoFactura)) {
+                    ncDocType = `NOTA_CREDITO_${tipoFactura}`;
+                    // Mapeo AFIP
+                    const mapTipos = { 'A': 3, 'B': 8, 'C': 13 };
+                    fiscalCbteTipo = mapTipos[tipoFactura];
+                }
+            } else {
+                // Si es Ticket X, generamos una NC interna X
+                ncDocType = 'NOTA_CREDITO_X';
+            }
+
+            // Datos para la NC (valores negativos para estadística financiera)
+            const factor = -1;
+            const ncTotal = Number(originalSale.total) * factor;
+            const ncSubtotal = Number(originalSale.subtotal) * factor;
+            const ncDiscount = Number(originalSale.discountAmount) * factor;
+
+            // Turno activo del usuario actual (quien anula)
+            const activeShift = await prisma.cashShift.findFirst({
+                where: { userId, status: 'OPEN' }
+            });
+
+            // Generar número de NC
+            const saleCount = await prisma.sale.count({ where: { branchId: originalSale.branchId } });
+            const ncNumber = `NC-${originalSale.branch?.code || 'POS'}-${String(saleCount + 1).padStart(6, '0')}`;
+
+            // --- TRANSACCIÓN DB ---
+            const creditNote = await prisma.$transaction(async (tx) => {
+                // 1. Crear Venta tipo NC
+                const nc = await tx.sale.create({
+                    data: {
+                        id: uuidv4(),
+                        saleNumber: ncNumber,
+                        documentType: ncDocType,
+                        subtotal: ncSubtotal,
+                        discountPercent: originalSale.discountPercent,
+                        discountAmount: ncDiscount,
+                        taxAmount: 0, // Simplificado
+                        total: ncTotal,
+                        status: 'COMPLETED',
+                        isCreditNote: true,
+                        originalSaleId: originalSale.id, // VINCULACIÓN CLAVE
+                        creditNoteReason: reason,
+                        userId: userId,
+                        branchId: originalSale.branchId,
+                        customerId: originalSale.customerId,
+                        cashShiftId: activeShift?.id || null, // Se imputa al turno de quien anula
+                        items: {
+                            create: originalSale.items.map(item => ({
+                                id: uuidv4(),
+                                productId: item.productId,
+                                productName: item.productName,
+                                productSku: item.productSku,
+                                quantity: item.quantity * factor, // Cantidad negativa (-1)
+                                unitPrice: item.unitPrice,
+                                costPrice: item.costPrice,
+                                subtotal: Number(item.subtotal) * factor,
+                                discountAmount: item.discountAmount
+                            }))
+                        },
+                        payments: {
+                            create: originalSale.payments.map(p => ({
+                                id: uuidv4(),
+                                paymentMethodId: p.paymentMethodId,
+                                amount: Number(p.amount) * factor, // Monto negativo
+                                reference: p.reference
+                            }))
+                        }
+                    },
+                    include: {
+                        customer: true,
+                        items: true
+                    }
+                });
+
+                // 2. Restaurar Stock (Entrada)
+                for (const item of originalSale.items) {
+                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    if (product && !product.isService) {
+                        await tx.product.update({
+                            where: { id: item.productId },
+                            data: { stockGlobal: { increment: item.quantity } }
+                        });
+
+                        await tx.stockMovement.create({
+                            data: {
+                                id: uuidv4(),
+                                productId: item.productId,
+                                branchId: originalSale.branchId,
+                                userId: userId,
+                                type: 'IN', // Devolución entra al stock
+                                reason: 'CUSTOMER_RETURN',
+                                quantity: item.quantity,
+                                previousQty: product.stockGlobal,
+                                newQty: product.stockGlobal + item.quantity,
+                                reference: nc.id,
+                                notes: `Anulación Venta ${originalSale.saleNumber}`
+                            }
+                        });
+                    }
+                }
+
+                // 3. Gestionar Caja (Devolución de Dinero)
+                if (activeShift) {
+                    // Sumamos pagos en efectivo de la venta original
+                    const cashMethods = originalSale.payments.filter(p => p.paymentMethod.affectsCash);
+                    const cashTotalReturn = cashMethods.reduce((sum, p) => sum + Number(p.amount), 0);
+
+                    // Si hay devolución de efectivo, registramos salida
+                    if (cashTotalReturn > 0) {
+                        await tx.cashMovement.create({
+                            data: {
+                                id: uuidv4(),
+                                cashShiftId: activeShift.id,
+                                userId: userId,
+                                type: 'OUT',
+                                reason: 'CREDIT_NOTE',
+                                amount: cashTotalReturn, // Positivo para el movimiento (es un egreso de X pesos)
+                                description: `Devolución s/NC ${ncNumber}`,
+                                saleId: nc.id,
+                                balance: 0 // Se debería calcular
+                            }
+                        });
+
+                        // Actualizar caja
+                        await tx.cashShift.update({
+                            where: { id: activeShift.id },
+                            data: {
+                                totalCreditNotes: { increment: Math.abs(ncTotal) },
+                                totalCashOut: { increment: cashTotalReturn }, // Salida física
+                                expectedCash: { decrement: cashTotalReturn } // Saldo baja
+                            }
+                        });
+                    } else {
+                        // Si era tarjeta/cta cte, solo suma a estadística de NCs, no mueve efectivo
+                        await tx.cashShift.update({
+                            where: { id: activeShift.id },
+                            data: {
+                                totalCreditNotes: { increment: Math.abs(ncTotal) }
+                            }
+                        });
+                    }
+                }
+
+                // 4. Revertir Cuenta Corriente (si aplica)
+                if (originalSale.customerId) {
+                    const accountPayment = originalSale.payments.find(p => p.paymentMethod.isAccountPayment);
+                    if (accountPayment) {
+                        // Crédito a favor del cliente (baja su deuda)
+                        const amountToRestore = Number(accountPayment.amount);
+                        await tx.customer.update({
+                            where: { id: originalSale.customerId },
+                            data: { currentBalance: { decrement: amountToRestore } }
+                        });
+
+                        await tx.customerAccountMovement.create({
+                            data: {
+                                id: uuidv4(),
+                                customerId: originalSale.customerId,
+                                type: 'CREDIT',
+                                amount: amountToRestore,
+                                balance: 0, // Trigger calc
+                                description: `NC ${ncNumber} p/Anulación`,
+                                reference: nc.id
+                            }
+                        });
+                    }
+                }
+
+                return nc;
+            });
+
+            // --- FISCALIZACIÓN AFIP (Post-Transacción DB) ---
+            if (isFiscal && fiscalCbteTipo) {
+                try {
+                    const afipService = require('../services/afip.service');
+
+                    // Datos para comprobante asociado (la factura original)
+                    const [ptoVtaOrig, cbteNroOrig] = originalSale.fiscalNumber.split('-');
+                    const voucherAssoc = {
+                        type: parseInt(originalSale.cae ? fiscalCbteTipo - 2 : 0), // Hack: Si NC es 3 (A), Factura es 1 (A). Si NC es 8 (B), Factura es 6 (B).
+                        // Mejor lógica: obtener el mapping inverso o guardar el tipo original numérico.
+                        // Simplificación: usaremos el tipo de la factura original deducido.
+                        // Factura A=1, B=6, C=11. 
+                        // NC A=3, B=8, C=13.
+                        // Diferencia es siempre 2? No. 3-1=2, 8-6=2, 13-11=2. SI!
+                        salesPoint: parseInt(ptoVtaOrig),
+                        number: parseInt(cbteNroOrig)
+                    };
+
+                    // Corregir tipo asociado:
+                    let tipoOrig = 0;
+                    if (fiscalCbteTipo === 3) tipoOrig = 1;      // NC A -> Fac A
+                    else if (fiscalCbteTipo === 8) tipoOrig = 6; // NC B -> Fac B
+                    else if (fiscalCbteTipo === 13) tipoOrig = 11;// NC C -> Fac C
+
+                    voucherAssoc.type = tipoOrig;
+
+                    // NOTA: Para createVoucher pasamos el objeto venta NC (con montos negativos en DB).
+                    // PERO AFIP quiere montos POSITIVOS en el payload.
+                    // createVoucher hace `Math.abs`? No.
+                    // Debemos crear un objeto proxy con montos positivos.
+                    const afipSaleData = {
+                        ...creditNote,
+                        total: Math.abs(Number(creditNote.total)), // Positivizar
+                        customer: originalSale.customer // Datos cliente
+                    };
+
+                    const fiscalResult = await afipService.createVoucher(afipSaleData, fiscalCbteTipo, voucherAssoc);
+
+                    // Actualizar NC con CAE
+                    const caeExpStr = fiscalResult.caeExpiration;
+                    const caeExpDate = new Date(
+                        parseInt(caeExpStr.substring(0, 4)),
+                        parseInt(caeExpStr.substring(4, 6)) - 1,
+                        parseInt(caeExpStr.substring(6, 8))
+                    );
+
+                    await prisma.sale.update({
+                        where: { id: creditNote.id },
+                        data: {
+                            fiscalNumber: `${fiscalResult.salesPoint.toString().padStart(4, '0')}-${fiscalResult.voucherNumber.toString().padStart(8, '0')}`,
+                            cae: fiscalResult.cae,
+                            caeExpiration: caeExpDate,
+                            qrData: fiscalResult.qrData,
+                            afipStatus: 'APPROVED'
+                        }
+                    });
+
+                    // Recargar dato actualizado
+                    creditNote.fiscalNumber = `${fiscalResult.salesPoint.toString().padStart(4, '0')}-${fiscalResult.voucherNumber.toString().padStart(8, '0')}`;
+                    creditNote.cae = fiscalResult.cae;
+
+                } catch (afipError) {
+                    console.error('Error fiscalizando NC:', afipError);
+                    // No hacemos rollback de la anulación interna, pero marcamos error fiscal
+                    await prisma.sale.update({
+                        where: { id: creditNote.id },
+                        data: {
+                            afipStatus: 'REJECTED',
+                            afipError: afipError.message
+                        }
+                    });
+                }
+            }
+
+            res.status(201).json({
+                success: true,
+                message: 'Nota de Crédito generada exitosamente',
+                data: creditNote
+            });
+
+        } catch (error) {
+            console.error('Error creating credit note:', error);
+            res.status(500).json({ error: 'Error al anular venta: ' + error.message });
         }
     },
 

@@ -15,7 +15,7 @@ interface CartState {
     promotions: Promotion[];
 }
 
-interface CartActions {
+interface Actions {
     addItem: (product: Product) => void;
     removeItem: (productId: string) => void;
     updateQuantity: (productId: string, quantity: number) => void;
@@ -55,73 +55,64 @@ const applyPromotionsLogic = (items: CartItem[], promotions: Promotion[]): CartI
         promoName: undefined
     }));
 
-    if (promotions.length === 0) return newItems;
+    if (promotions && promotions.length > 0) {
+        promotions.forEach(promo => {
+            // Encontrar items afectados por esta promo
+            // La validación simple usa el ID.
+            // Si promo.products es undefined (no cargado), no aplica.
+            if (!promo.products || promo.products.length === 0) return;
 
-    promotions.forEach(promo => {
-        // Encontrar items afectados por esta promo
-        // La validación simple usa el ID.
-        // Si promo.products es undefined (no cargado), no aplica.
-        if (!promo.products || promo.products.length === 0) return;
+            // Items del carrito que están en la lista de la promo
+            const eligibleItems = newItems.filter(item =>
+                promo.products?.some(p => p.productId === item.product.id)
+            );
 
-        // Items del carrito que están en la lista de la promo
-        const eligibleItems = newItems.filter(item =>
-            promo.products?.some(p => p.productId === item.product.id)
-        );
+            if (eligibleItems.length === 0) return;
 
-        if (eligibleItems.length === 0) return;
-
-        // 1. TIPO PORCENTAJE
-        if (promo.type === 'PERCENTAGE' && promo.discountPercent) {
-            eligibleItems.forEach(item => {
-                const discount = (item.product.salePrice * item.quantity * promo.discountPercent!) / 100;
-                item.promoDiscount = (item.promoDiscount || 0) + discount;
-                item.promoName = promo.name;
-            });
-        }
-
-        // 2. TIPO NxM
-        else if (promo.type === 'N_X_M' && promo.buyQuantity && promo.payQuantity) {
-            const totalQty = eligibleItems.reduce((acc, item) => acc + item.quantity, 0);
-
-            if (totalQty >= promo.buyQuantity) {
-                const sets = Math.floor(totalQty / promo.buyQuantity);
-                const freeCount = sets * (promo.buyQuantity - promo.payQuantity);
-
-                // Descontar los más baratos
-                // Expandir a unidades individuales
-                let allUnits: { price: number, itemIndex: number }[] = [];
+            // 1. TIPO PORCENTAJE
+            if (promo.type === 'PERCENTAGE' && promo.discountPercent) {
                 eligibleItems.forEach(item => {
-                    // Mapeamos de vuelta al índice en newItems
-                    const idx = newItems.indexOf(item);
-                    for (let i = 0; i < item.quantity; i++) {
-                        allUnits.push({ price: item.product.salePrice, itemIndex: idx });
-                    }
-                });
-
-                // Ordenar precio asc
-                allUnits.sort((a, b) => a.price - b.price);
-
-                // Marcar como gratis las primeras N unidades
-                const freeUnits = allUnits.slice(0, freeCount);
-
-                freeUnits.forEach(unit => {
-                    const item = newItems[unit.itemIndex];
-                    item.promoDiscount = (item.promoDiscount || 0) + unit.price;
+                    const discount = (item.product.salePrice * item.quantity * promo.discountPercent!) / 100;
+                    item.promoDiscount = (item.promoDiscount || 0) + discount;
                     item.promoName = promo.name;
                 });
             }
-        }
 
-        // 3. FIXED PRICE (Combo)
-        else if (promo.type === 'FIXED_PRICE' && promo.fixedPrice != null) {
-            // Asume que el fixed price es por SET de productos definidos?
-            // O si compro 1 unidad de X cuesta Fixed?
-            // Interpretación simple: Si comprás estos productos, el total es Fixed? 
-            // Complejo. Asumiremos "Precio Unitario Fijo" si un solo producto, o "Precio Combo" si varios.
-            // Implementación básica: Si hay 1 item y coincide, fija el precio.
-            // Dejémoslo para v2 si es complejo. El usuario pidió 2x1 y %.
-        }
-    });
+            // 2. TIPO NxM
+            else if (promo.type === 'N_X_M' && promo.buyQuantity && promo.payQuantity) {
+                const totalQty = eligibleItems.reduce((acc, item) => acc + item.quantity, 0);
+
+                if (totalQty >= promo.buyQuantity) {
+                    const sets = Math.floor(totalQty / promo.buyQuantity);
+                    const freeCount = sets * (promo.buyQuantity - promo.payQuantity);
+
+                    // Descontar los más baratos
+                    // Expandir a unidades individuales
+                    let allUnits: { price: number, itemIndex: number }[] = [];
+                    eligibleItems.forEach(item => {
+                        // Mapeamos de vuelta al índice en newItems
+                        const idx = newItems.indexOf(item);
+                        for (let i = 0; i < item.quantity; i++) {
+                            allUnits.push({ price: item.product.salePrice, itemIndex: idx });
+                        }
+                    });
+
+                    // Ordenar precio asc
+                    allUnits.sort((a, b) => a.price - b.price);
+
+                    // Marcar como gratis las primeras N unidades
+                    const freeUnits = allUnits.slice(0, freeCount);
+
+                    freeUnits.forEach(unit => {
+                        const item = newItems[unit.itemIndex];
+                        item.promoDiscount = (item.promoDiscount || 0) + unit.price;
+                        item.promoName = promo.name;
+                    });
+                }
+            }
+            // 3. FIXED PRICE (Pendiente)
+        });
+    }
 
     // Recalcular subtotales con los descuentos aplicados
     return newItems.map(item => ({
@@ -131,7 +122,7 @@ const applyPromotionsLogic = (items: CartItem[], promotions: Promotion[]): CartI
 };
 
 
-export const useCartStore = create<CartState & CartActions>((set, get) => ({
+export const useCartStore = create<CartState & Actions>((set, get) => ({
     items: [],
     customer: null,
     discountPercent: 0,
@@ -142,12 +133,6 @@ export const useCartStore = create<CartState & CartActions>((set, get) => ({
         try {
             // Cargar solo vigentes
             const promos = await promoService.getAll(true);
-            // Necesitamos los detalles de productos para saber a cuáles aplica
-            // getAll ya devuelve isActive=true, pero necesitamos include products. 
-            // El controller actual incluye `_count`, no los productos.
-            // Ouch. El controller getAll NECESITA include products para que esto funcione.
-            // DEBO ACTUALIZAR EL CONTROLLER getAll.
-            // Mientras tanto seteo array vacio.
             set({ promotions: promos });
         } catch (e) {
             console.error('Error loading promotions', e);
@@ -162,9 +147,6 @@ export const useCartStore = create<CartState & CartActions>((set, get) => ({
 
     addItem: (product: Product) => {
         const items = get().items;
-        // Limpiamos referencias a promos viejas antes de mergear lógicas
-        // Mejor añadir raw y luego applyPromotions
-
         const existingIndex = items.findIndex(item => item.product.id === product.id);
         let newItems = [...items];
 
@@ -172,7 +154,6 @@ export const useCartStore = create<CartState & CartActions>((set, get) => ({
             newItems[existingIndex] = {
                 ...newItems[existingIndex],
                 quantity: newItems[existingIndex].quantity + 1,
-                // El subtotal se recalculará en applyPromotions
             };
         } else {
             const newItem: CartItem = {
@@ -184,9 +165,6 @@ export const useCartStore = create<CartState & CartActions>((set, get) => ({
             newItems.push(newItem);
         }
 
-        // Aplicar lógica de promos sobre la nueva lista
-        // Primero setear items raw
-        // set({ items: newItems }); // No necesario si llamamos a la logica directo
         const finalItems = applyPromotionsLogic(newItems, get().promotions);
         set({ items: finalItems });
     },
@@ -232,7 +210,7 @@ export const useCartStore = create<CartState & CartActions>((set, get) => ({
 
     getSubtotal: () => get().items.reduce((sum, item) => sum + item.subtotal, 0),
     getDiscountAmount: () => (get().getSubtotal() * get().discountPercent) / 100,
-    getTotal: () => get().getSubtotal() - get().getDiscountAmount(),
+    getTotal: () => Math.max(0, get().getSubtotal() - get().getDiscountAmount()),
     getItemCount: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
 }));
 

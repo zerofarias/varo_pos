@@ -4,6 +4,20 @@
  */
 
 require('dotenv').config();
+// --- PARCHE DE COMPATIBILIDAD SSL PARA AFIP (Node 20+) ---
+const crypto = require('crypto');
+try {
+    // Permite conexiones a servidores con seguridad antigua (AFIP)
+    const { constants } = crypto;
+    const https = require('https');
+    https.globalAgent.options.secureOptions = constants.SSL_OP_LEGACY_SERVER_CONNECT;
+    // Opcional: reducir nivel de seguridad global para cifrados viejos
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+} catch (e) {
+    console.warn('No se pudo aplicar parche SSL legacy:', e.message);
+}
+// -----------------------------------------------------------
+
 const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
@@ -98,6 +112,7 @@ app.use('/api/credit-notes', creditNoteRoutes);
 app.use('/api/supplier-returns', supplierReturnRoutes);
 app.use('/api/cash-shifts', cashShiftRoutes);
 app.use('/api/promotions', promoRoutes);
+app.use('/api/afip', require('./routes/afip.routes'));
 app.use('/api/stats', statsRoutes);
 
 // ================================

@@ -1,105 +1,78 @@
-/**
- * VARO POS - Servicios de Ventas
- */
+import axios from 'axios';
+import { api } from './api';
+import type { Sale, CartItem, PaymentMethod } from '@/types';
 
-import api from './api';
-import type { Sale, CartItem, PaymentMethod, ApiResponse, PaginatedResponse } from '@/types';
-
-interface CreateSaleData {
-    documentType?: string;
-    customerId?: string;
-    discountPercent?: number;
-    items: Array<{
-        productId: string;
-        quantity: number;
-        discountPercent?: number;
-        unitPrice?: number; // Precio personalizado para genéricos
-    }>;
-    payments: Array<{
-        paymentMethodId: string;
-        amount: number;
-        reference?: string;
-    }>;
-}
-
+// Definir interfaz local si no existe en types
 interface SaleFilters {
     page?: number;
     limit?: number;
-    startDate?: string;
-    endDate?: string;
+    startDate?: Date;
+    endDate?: Date;
     status?: string;
     customerId?: string;
-    userId?: string;
-}
-
-interface DailySummary {
-    date: string;
-    totalSales: number;
-    totalAmount: number;
-    totalProfit: number;
-    averageTicket: number;
-    byPaymentMethod: Array<{
-        method: string;
-        total: number;
-        count: number;
-    }>;
 }
 
 export const saleService = {
-    async getAll(filters: SaleFilters = {}): Promise<PaginatedResponse<Sale>> {
+    getAll: async (filters?: SaleFilters) => {
         const params = new URLSearchParams();
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value !== undefined) params.append(key, String(value));
-        });
-        const response = await api.get<PaginatedResponse<Sale>>(`/sales?${params}`);
+        if (filters) {
+            if (filters.page) params.append('page', filters.page.toString());
+            if (filters.limit) params.append('limit', filters.limit.toString());
+            if (filters.startDate) params.append('startDate', filters.startDate.toISOString());
+            if (filters.endDate) params.append('endDate', filters.endDate.toISOString());
+            if (filters.status) params.append('status', filters.status);
+            if (filters.customerId) params.append('customerId', filters.customerId);
+        }
+        const response = await api.get(`/sales?${params.toString()}`);
         return response.data;
     },
 
-    async getById(id: string): Promise<Sale> {
-        const response = await api.get<ApiResponse<Sale>>(`/sales/${id}`);
-        return response.data.data;
+    getById: async (id: string) => {
+        const response = await api.get(`/sales/${id}`);
+        return response.data;
     },
 
-    async create(data: CreateSaleData): Promise<Sale> {
-        const response = await api.post<ApiResponse<Sale>>('/sales', data);
-        return response.data.data;
+    create: async (data: any) => {
+        const response = await api.post('/sales', data);
+        return response.data;
     },
 
-    async cancel(id: string, reason?: string): Promise<void> {
-        await api.post(`/sales/${id}/cancel`, { reason });
+    cancel: async (id: string, reason?: string) => {
+        const response = await api.post(`/sales/${id}/cancel`, { reason });
+        return response.data;
     },
 
-    async getDailySummary(date?: string): Promise<DailySummary> {
-        const params = date ? `?date=${date}` : '';
-        const response = await api.get<ApiResponse<DailySummary>>(`/sales/daily-summary${params}`);
-        return response.data.data;
+    createCreditNote: async (id: string, reason: string) => {
+        const response = await api.post(`/sales/${id}/credit-note`, { reason });
+        return response.data;
     },
 
-    async getPaymentMethods(): Promise<PaymentMethod[]> {
-        const response = await api.get<ApiResponse<PaymentMethod[]>>('/payment-methods');
-        return response.data.data;
+    getPaymentMethods: async () => {
+        const response = await api.get('/payment-methods');
+        return response.data as PaymentMethod[];
     },
 
-    // Helper para convertir carrito a formato de API
-    cartToSaleData(
-        cart: CartItem[],
-        payments: Array<{ paymentMethodId: string; amount: number; reference?: string }>,
-        options?: { customerId?: string; discountPercent?: number; documentType?: string }
-    ): CreateSaleData {
+    // Helper para convertir items del carrito al formato de venta
+    cartToSaleData: (
+        cartItems: CartItem[],
+        payments: { paymentMethodId: string; amount: number }[],
+        customerId?: string,
+        discountPercent: number = 0
+    ) => {
+        const items = cartItems.map(item => ({
+            productId: (item.product as any).databaseId || item.product.id, // ID real para el backend
+            quantity: item.quantity,
+            discountPercent: item.discountPercent,
+            unitPrice: item.product.salePrice // Precio personalizado
+        }));
+
         return {
-            documentType: options?.documentType || 'TICKET_X',
-            customerId: options?.customerId,
-            discountPercent: options?.discountPercent || 0,
-            items: cart.map(item => ({
-                // Si el producto tiene 'databaseId' (generic), usarlo. Si no, usar item.product.id
-                productId: item.product.databaseId || item.product.id,
-                quantity: item.quantity,
-                discountPercent: item.discountPercent,
-                unitPrice: item.product.salePrice // Importante: enviar el precio del carrito
-            })),
+            items,
             payments,
+            customerId,
+            discountPercent
         };
     },
 };
 
-export default saleService;
+

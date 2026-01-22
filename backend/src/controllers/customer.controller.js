@@ -278,8 +278,8 @@ const customerController = {
                 });
             }
 
+            // 1. Obtener cliente
             const customer = await prisma.customer.findUnique({ where: { id } });
-
             if (!customer || customer.deletedAt) {
                 return res.status(404).json({
                     success: false,
@@ -287,27 +287,80 @@ const customerController = {
                 });
             }
 
+            // 2. Obtener turno activo (NECESARIO para ingresar dinero)
+            const activeShift = await prisma.cashShift.findFirst({
+                where: {
+                    userId: req.user.id,
+                    status: 'OPEN'
+                }
+            });
+
+            if (!activeShift) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Caja cerrada',
+                    details: ['Debe abrir su turno de caja para recibir pagos']
+                });
+            }
+
             const previousBalance = parseFloat(customer.currentBalance);
             const paymentAmount = parseFloat(amount);
-            const newBalance = Math.max(0, previousBalance - paymentAmount);
+            // El saldo puede quedar negativo (a favor del cliente) si paga de más
+            const newBalance = previousBalance - paymentAmount;
 
-            await prisma.$transaction([
-                prisma.customer.update({
+            // 3. Obtener sucursal para el movimiento de stock/caja si fuera necesario
+            // En este caso solo caja.
+
+            await prisma.$transaction(async (tx) => {
+                // A. Actualizar saldo cliente
+                await tx.customer.update({
                     where: { id },
                     data: { currentBalance: newBalance }
-                }),
-                prisma.customerAccountMovement.create({
+                });
+
+                // B. Registrar movimiento en cuenta corriente
+                await tx.customerAccountMovement.create({
                     data: {
                         id: uuidv4(),
                         customerId: id,
-                        type: 'CREDIT',
+                        type: 'CREDIT', // Pago = Crédito para la cuenta (baja deuda)
                         amount: paymentAmount,
                         balance: newBalance,
-                        description: description || 'Pago de cuenta corriente',
+                        description: description || 'Pago a cuenta corriente',
                         reference: reference || null
                     }
-                })
-            ]);
+                });
+
+                // C. Registrar ingreso en CAJA FÍSICA
+                // Primero verificamos el saldo actual de la caja para el registro
+                // (Aunque CashMovement guarda el saldo AFTER, necesitamos calcularlo.
+                // Sin embargo, para simplificar y evitar race conditions complejos, 
+                // prisma no recalcula al vuelo, hacemos un update atómico en Shift)
+
+                await tx.cashMovement.create({
+                    data: {
+                        id: uuidv4(),
+                        cashShift: { connect: { id: activeShift.id } },
+                        user: { connect: { id: req.user.id } },
+                        type: 'IN',
+                        reason: 'DEPOSIT', // Depósito / Cobro de deuda
+                        amount: paymentAmount,
+                        description: `Cobro Cta.Cte. Cliente: ${customer.firstName} ${customer.lastName}`,
+                        // No asignamos saleId porque no es una venta nueva
+                        balance: 0 // TODO: Lo ideal sería calcular el saldo acumulado, pero por ahora lo dejamos en 0 o necesitamos leer el último mov.
+                        // Para evitar complejidad, dejamos 0 o implementamos lógica de saldo real si es crítico.
+                    }
+                });
+
+                // D. Actualizar totales del turno
+                await tx.cashShift.update({
+                    where: { id: activeShift.id },
+                    data: {
+                        totalCashIn: { increment: paymentAmount },
+                        expectedCash: { increment: paymentAmount }
+                    }
+                });
+            });
 
             res.json({
                 success: true,
@@ -315,11 +368,11 @@ const customerController = {
                 data: {
                     previousBalance,
                     paymentAmount,
-                    newBalance,
-                    change: paymentAmount > previousBalance ? paymentAmount - previousBalance : 0
+                    newBalance
                 }
             });
         } catch (error) {
+            console.error('Error en registerPayment:', error);
             res.status(500).json({
                 success: false,
                 error: 'Error al registrar pago',

@@ -23,6 +23,106 @@ router.get('/', authorize('cashregister.view'), cashRegisterController.getAll);
 
 /**
  * @swagger
+ * /cash-registers:
+ *   post:
+ *     tags: [Cash Register]
+ *     summary: Crear nueva caja registradora
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - code
+ *             properties:
+ *               name:
+ *                 type: string
+ *               code:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Caja creada exitosamente
+ */
+router.post('/', authorize('cashregister.create'), cashRegisterController.create);
+
+/**
+ * @swagger
+ * /cash-registers/{id}:
+ *   get:
+ *     tags: [Cash Register]
+ *     summary: Obtener caja por ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Detalles de la caja
+ */
+router.get('/:id', authorize('cashregister.view'), cashRegisterController.getById);
+
+/**
+ * @swagger
+ * /cash-registers/{id}:
+ *   put:
+ *     tags: [Cash Register]
+ *     summary: Actualizar caja registradora
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               code:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Caja actualizada exitosamente
+ */
+router.put('/:id', authorize('cashregister.edit'), cashRegisterController.update);
+
+/**
+ * @swagger
+ * /cash-registers/{id}:
+ *   delete:
+ *     tags: [Cash Register]
+ *     summary: Desactivar caja registradora
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Caja desactivada exitosamente
+ */
+router.delete('/:id', authorize('cashregister.delete'), cashRegisterController.delete);
+
+/**
+ * @swagger
  * /cash-registers/current:
  *   get:
  *     tags: [Cash Register]

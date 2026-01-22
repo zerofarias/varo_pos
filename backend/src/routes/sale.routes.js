@@ -80,6 +80,59 @@ router.get('/', authorize('sales.view'), saleController.getAll);
 
 /**
  * @swagger
+ * /sales/daily-summary:
+ *   get:
+ *     tags: [Sales]
+ *     summary: Resumen diario de ventas
+ *     description: Devuelve estadísticas del día actual
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha a consultar (por defecto hoy)
+ *     responses:
+ *       200:
+ *         description: Resumen diario
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalSales:
+ *                       type: integer
+ *                       example: 45
+ *                     totalAmount:
+ *                       type: number
+ *                       example: 125000.50
+ *                     totalProfit:
+ *                       type: number
+ *                       example: 35000.25
+ *                     averageTicket:
+ *                       type: number
+ *                       example: 2777.79
+ *                     byPaymentMethod:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           method:
+ *                             type: string
+ *                           total:
+ *                             type: number
+ *                           count:
+ *                             type: integer
+ */
+router.get('/daily-summary', authorize('sales.view'), saleController.getDailySummary);
+
+/**
+ * @swagger
  * /sales/{id}:
  *   get:
  *     tags: [Sales]
@@ -252,23 +305,43 @@ router.post('/', authorize('sales.create'), requireOpenShift, saleController.cre
  */
 router.post('/:id/cancel', authorize('sales.cancel'), requireOpenShift, saleController.cancel);
 
+
 /**
  * @swagger
- * /sales/daily-summary:
- *   get:
+ * /sales/{id}/credit-note:
+ *   post:
  *     tags: [Sales]
- *     summary: Resumen diario de ventas
- *     description: Devuelve estadísticas del día actual
+ *     summary: Generar Nota de Crédito (Anular Venta)
+ *     description: |
+ *       Genera una Nota de Crédito para anular una venta existente.
+ *       
+ *       **Efectos:**
+ *       - Crea un nuevo comprobante (Sale) con montos negativos
+ *       - Restaura el stock de los productos
+ *       - Registra una salida de dinero de la caja (si hubo pago efectivo)
+ *       - Reintegra saldo a cuenta corriente (si aplica)
+ *       - Emite NC electrónica en AFIP (si la venta original era fiscal)
  *     parameters:
- *       - in: query
- *         name: date
+ *       - in: path
+ *         name: id
+ *         required: true
  *         schema:
  *           type: string
- *           format: date
- *         description: Fecha a consultar (por defecto hoy)
+ *           format: uuid
+ *         description: ID de la venta a anular
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 example: "Devolución por producto defectuoso"
  *     responses:
- *       200:
- *         description: Resumen diario
+ *       201:
+ *         description: Nota de Crédito creada
  *         content:
  *           application/json:
  *             schema:
@@ -277,32 +350,10 @@ router.post('/:id/cancel', authorize('sales.cancel'), requireOpenShift, saleCont
  *                 success:
  *                   type: boolean
  *                 data:
- *                   type: object
- *                   properties:
- *                     totalSales:
- *                       type: integer
- *                       example: 45
- *                     totalAmount:
- *                       type: number
- *                       example: 125000.50
- *                     totalProfit:
- *                       type: number
- *                       example: 35000.25
- *                     averageTicket:
- *                       type: number
- *                       example: 2777.79
- *                     byPaymentMethod:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           method:
- *                             type: string
- *                           total:
- *                             type: number
- *                           count:
- *                             type: integer
- */
-router.get('/daily-summary', authorize('sales.view'), saleController.getDailySummary);
+ *                   $ref: '#/components/schemas/Sale'
+ *       400:
+ *         description: Error de validación (ej. venta ya anulada)
+ * */
+router.post('/:id/credit-note', authorize('sales.cancel'), requireOpenShift, saleController.createCreditNote);
 
 module.exports = router;

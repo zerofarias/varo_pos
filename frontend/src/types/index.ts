@@ -123,6 +123,13 @@ export interface Sale {
     customer?: CustomerSummary;
     user: UserSummary;
     createdAt: string;
+
+    // AFIP
+    afipStatus?: string;
+    cae?: string;
+    caeExpiration?: string;
+    fiscalNumber?: string;
+    afipError?: string;
 }
 
 export interface SaleItem {

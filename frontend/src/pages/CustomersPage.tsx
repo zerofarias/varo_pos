@@ -5,11 +5,11 @@
 import { useState, useEffect } from 'react';
 import {
     Search, Plus, Users, Phone, MapPin,
-    CreditCard, ChevronRight, AlertCircle, Edit
+    CreditCard, ChevronRight, AlertCircle, Edit, DollarSign
 } from 'lucide-react';
 import { customerService } from '@/services';
 import { useConfigStore, themeColors } from '@/stores/configStore';
-import { CustomerModal } from '@/components/modals/EditModals';
+import { CustomerModal, PaymentModal } from '@/components/modals/EditModals';
 import type { Customer } from '@/types';
 
 export const CustomersPage = () => {
@@ -23,7 +23,9 @@ export const CustomersPage = () => {
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+    const [paymentCustomer, setPaymentCustomer] = useState<Customer | null>(null);
 
     useEffect(() => {
         loadCustomers();
@@ -64,6 +66,12 @@ export const CustomersPage = () => {
         setShowModal(true);
     };
 
+    const handleOpenPayment = (customer: Customer, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setPaymentCustomer(customer);
+        setShowPaymentModal(true);
+    };
+
     const handleSave = async (data: Partial<Customer>) => {
         try {
             if (editingCustomer) {
@@ -74,6 +82,17 @@ export const CustomersPage = () => {
             loadCustomers();
         } catch (error: any) {
             alert(error.response?.data?.error || 'Error al guardar');
+            throw error;
+        }
+    };
+
+    const handlePayment = async (amount: number, description: string) => {
+        if (!paymentCustomer) return;
+        try {
+            await customerService.registerPayment(paymentCustomer.id, amount, description);
+            loadCustomers(); // Reload to update debt
+        } catch (error: any) {
+            alert(error.response?.data?.error || 'Error al registrar pago');
             throw error;
         }
     };
@@ -134,8 +153,8 @@ export const CustomersPage = () => {
                     <button
                         onClick={() => setShowWithDebt(!showWithDebt)}
                         className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-colors ${showWithDebt
-                                ? 'bg-red-50 border-red-200 text-red-700'
-                                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            ? 'bg-red-50 border-red-200 text-red-700'
+                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                             }`}
                     >
                         <AlertCircle size={18} />
@@ -153,6 +172,7 @@ export const CustomersPage = () => {
                             customer={customer}
                             theme={theme}
                             onEdit={handleEdit}
+                            onPay={handleOpenPayment}
                         />
                     ))}
                 </div>
@@ -165,13 +185,23 @@ export const CustomersPage = () => {
                 )}
             </div>
 
-            {/* Modal */}
+            {/* Modal Edit */}
             {showModal && (
                 <CustomerModal
                     customer={editingCustomer}
                     onClose={() => setShowModal(false)}
                     onSave={handleSave}
                     onDelete={editingCustomer ? handleDelete : undefined}
+                    theme={theme}
+                />
+            )}
+
+            {/* Modal Payment */}
+            {showPaymentModal && paymentCustomer && (
+                <PaymentModal
+                    customer={paymentCustomer}
+                    onClose={() => setShowPaymentModal(false)}
+                    onSave={handlePayment}
                     theme={theme}
                 />
             )}
@@ -182,23 +212,28 @@ export const CustomersPage = () => {
 const CustomerCard = ({
     customer,
     theme,
-    onEdit
+    onEdit,
+    onPay
 }: {
     customer: Customer;
     theme: typeof themeColors['indigo'];
     onEdit: (c: Customer) => void;
+    onPay: (c: Customer, e: React.MouseEvent) => void;
 }) => {
     const hasDebt = customer.currentBalance < 0;
     const fullName = `${customer.firstName} ${customer.lastName}`;
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow relative overflow-hidden">
+        <div
+            onClick={() => onEdit(customer)}
+            className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer group"
+        >
             {/* Debt indicator bar */}
             <div className={`absolute top-0 left-0 w-1 h-full ${hasDebt ? 'bg-red-500' : 'bg-emerald-500'}`} />
 
             <div className="flex justify-between items-start mb-3 pl-2">
                 <div>
-                    <h3 className="font-bold text-slate-800 text-lg">{fullName}</h3>
+                    <h3 className="font-bold text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">{fullName}</h3>
                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                         <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded">
                             {customer.code}
@@ -206,12 +241,24 @@ const CustomerCard = ({
                         {customer.documentNumber && `• ${customer.documentNumber}`}
                     </p>
                 </div>
-                <button
-                    onClick={() => onEdit(customer)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"
-                >
-                    <Edit size={18} />
-                </button>
+                <div className="flex gap-1">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onEdit(customer); }}
+                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        title="Editar datos"
+                    >
+                        <Edit size={18} />
+                    </button>
+                    {hasDebt && (
+                        <button
+                            onClick={(e) => onPay(customer, e)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors animate-pulse"
+                            title="Registrar pago"
+                        >
+                            <DollarSign size={18} />
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="flex items-center justify-between mb-4 pl-2">
@@ -246,17 +293,22 @@ const CustomerCard = ({
 
             <div className="flex justify-between items-center pl-2 pt-3 border-t border-slate-100">
                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${customer.isActive
-                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                        : 'bg-slate-100 text-slate-500 border border-slate-200'
+                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                    : 'bg-slate-100 text-slate-500 border border-slate-200'
                     }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${customer.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                     {customer.isActive ? 'Activo' : 'Inactivo'}
                 </span>
+
                 <button
-                    onClick={() => onEdit(customer)}
-                    className={`text-sm font-medium flex items-center gap-1 ${theme.text} hover:underline`}
+                    onClick={(e) => onPay(customer, e)}
+                    className={`text-sm font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${hasDebt
+                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                            : 'text-slate-500 hover:bg-slate-100'
+                        }`}
                 >
-                    Editar <ChevronRight size={16} />
+                    <DollarSign size={16} />
+                    {hasDebt ? 'Cobrar' : 'Cargar'}
                 </button>
             </div>
         </div>

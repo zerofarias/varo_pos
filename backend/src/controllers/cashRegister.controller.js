@@ -8,15 +8,198 @@ const { v4: uuidv4 } = require('uuid');
 const cashRegisterController = {
     async getAll(req, res) {
         try {
+            const { includeInactive } = req.query;
+
+            const where = { branchId: req.user.branchId || undefined };
+            if (includeInactive !== 'true') {
+                where.isActive = true;
+            }
+
             const registers = await prisma.cashRegister.findMany({
-                where: { branchId: req.user.branchId || undefined },
+                where,
                 include: {
                     branch: { select: { name: true } },
-                    openedBy: { select: { firstName: true, lastName: true } }
-                }
+                    _count: {
+                        select: { cashShifts: true }
+                    }
+                },
+                orderBy: { name: 'asc' }
             });
 
             res.json({ success: true, data: registers });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    async getById(req, res) {
+        try {
+            const { id } = req.params;
+
+            const register = await prisma.cashRegister.findUnique({
+                where: { id },
+                include: {
+                    branch: true,
+                    _count: {
+                        select: { cashShifts: true }
+                    }
+                }
+            });
+
+            if (!register) {
+                return res.status(404).json({ success: false, error: 'Caja no encontrada' });
+            }
+
+            res.json({ success: true, data: register });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    async create(req, res) {
+        try {
+            const { name, code, description, isActive } = req.body;
+
+            // Validaciones
+            if (!name || !code) {
+                return res.status(400).json({ success: false, error: 'Nombre y código son requeridos' });
+            }
+
+            // Verificar que el código no exista
+            const existing = await prisma.cashRegister.findUnique({
+                where: { code: code.toUpperCase() }
+            });
+
+            if (existing) {
+                return res.status(400).json({ success: false, error: 'El código de caja ya existe' });
+            }
+
+            const register = await prisma.cashRegister.create({
+                data: {
+                    id: uuidv4(),
+                    name,
+                    code: code.toUpperCase(),
+                    branchId: req.user.branchId,
+                    description: description || null,
+                    isActive: isActive !== undefined ? isActive : true
+                },
+                include: {
+                    branch: {
+                        select: {
+                            name: true,
+                            code: true
+                        }
+                    }
+                }
+            });
+
+            res.status(201).json({
+                success: true,
+                data: register,
+                message: 'Caja creada exitosamente'
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    async update(req, res) {
+        try {
+            const { id } = req.params;
+            const { name, code, description, isActive } = req.body;
+
+            const existing = await prisma.cashRegister.findUnique({
+                where: { id }
+            });
+
+            if (!existing) {
+                return res.status(404).json({ success: false, error: 'Caja no encontrada' });
+            }
+
+            // Si se cambia el código, verificar que no exista
+            if (code && code.toUpperCase() !== existing.code) {
+                const codeExists = await prisma.cashRegister.findUnique({
+                    where: { code: code.toUpperCase() }
+                });
+
+                if (codeExists) {
+                    return res.status(400).json({ success: false, error: 'El código de caja ya existe' });
+                }
+            }
+
+            const register = await prisma.cashRegister.update({
+                where: { id },
+                data: {
+                    ...(name && { name }),
+                    ...(code && { code: code.toUpperCase() }),
+                    ...(description !== undefined && { description }),
+                    ...(isActive !== undefined && { isActive })
+                },
+                include: {
+                    branch: {
+                        select: {
+                            name: true,
+                            code: true
+                        }
+                    }
+                }
+            });
+
+            res.json({
+                success: true,
+                data: register,
+                message: 'Caja actualizada exitosamente'
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    async delete(req, res) {
+        try {
+            const { id } = req.params;
+
+            const existing = await prisma.cashRegister.findUnique({
+                where: { id },
+                include: {
+                    _count: {
+                        select: { cashShifts: true }
+                    }
+                }
+            });
+
+            if (!existing) {
+                return res.status(404).json({ success: false, error: 'Caja no encontrada' });
+            }
+
+            // Verificar si tiene turnos abiertos
+            const openShifts = await prisma.cashShift.count({
+                where: {
+                    cashRegisterId: id,
+                    status: 'OPEN'
+                }
+            });
+
+            if (openShifts > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No se puede desactivar una caja con turnos abiertos'
+                });
+            }
+
+            // Soft delete: solo desactivar
+            const register = await prisma.cashRegister.update({
+                where: { id },
+                data: {
+                    isActive: false
+                }
+            });
+
+            res.json({
+                success: true,
+                data: register,
+                message: 'Caja desactivada exitosamente'
+            });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }

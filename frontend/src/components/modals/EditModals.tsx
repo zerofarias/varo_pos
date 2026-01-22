@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { X, Save, Loader2, Package, User, Trash2 } from 'lucide-react';
+import { X, Save, Loader2, Package, User, Trash2, CreditCard } from 'lucide-react';
 import type { Product, Customer, Category } from '@/types';
 import { themeColors } from '@/stores/configStore';
 
@@ -644,4 +644,137 @@ const ToggleOption = ({
     </label>
 );
 
-export default { ProductModal, CustomerModal };
+// ========================================
+// PAYMENT MODAL
+// ========================================
+
+interface PaymentModalProps {
+    customer: Customer;
+    onClose: () => void;
+    onSave: (amount: number, description: string) => Promise<void>;
+    theme: ThemeType;
+}
+
+export const PaymentModal = ({
+    customer,
+    onClose,
+    onSave,
+    theme
+}: PaymentModalProps) => {
+    const [loading, setLoading] = useState(false);
+    const [amount, setAmount] = useState('');
+    const [description, setDescription] = useState('');
+
+    const currentBalance = Math.abs(customer.currentBalance);
+    const isDebt = customer.currentBalance < 0;
+    const payAmount = parseFloat(amount) || 0;
+
+    // Si la deuda es $1000 (currentBalance = -1000) y pago $500, nuevo saldo = -500
+    // Si la deuda es $1000 y pago $1200, nuevo saldo = +200 (a favor)
+    const newBalance = customer.currentBalance + payAmount;
+    const isNewBalanceDebt = newBalance < 0;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!payAmount || payAmount <= 0) {
+            alert('Ingrese un monto válido');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await onSave(payAmount, description);
+            onClose();
+        } catch (error) {
+            console.error('Error saving payment:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl animate-scale-in my-8">
+                {/* Header */}
+                <div className="p-5 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg bg-emerald-600 text-white`}>
+                            <CreditCard size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-800">Registrar Pago</h3>
+                            <p className="text-xs text-slate-500">{customer.firstName} {customer.lastName}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-2">
+                        <X size={24} />
+                    </button>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+
+                    {/* Balance Info */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm text-slate-500">Saldo Actual</span>
+                            <span className={`font-bold ${isDebt ? 'text-red-600' : 'text-emerald-600'}`}>
+                                $ {Math.abs(customer.currentBalance).toLocaleString('es-AR')} {isDebt ? '(Deuda)' : '(Favor)'}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                            <span className="text-sm text-slate-600 font-medium">Nuevo Saldo</span>
+                            <span className={`font-bold ${isNewBalanceDebt ? 'text-slate-500' : 'text-emerald-600'}`}>
+                                $ {Math.abs(newBalance).toLocaleString('es-AR')} {isNewBalanceDebt ? '(Deuda)' : '(Favor)'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Amount */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Monto a Pagar *
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                            <input
+                                type="number"
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                className="w-full pl-8 pr-4 py-3 text-lg font-bold rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                placeholder="0.00"
+                                step="0.01"
+                                autoFocus
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Descripción / Notas
+                        </label>
+                        <input
+                            type="text"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="Ej: Pago parcial efectivo"
+                        />
+                    </div>
+
+                    {/* Submit */}
+                    <button
+                        type="submit"
+                        disabled={loading || !payAmount}
+                        className={`w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                        {loading ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                        {loading ? 'Registrando...' : 'Confirmar Pago'}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};

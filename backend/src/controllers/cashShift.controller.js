@@ -141,14 +141,16 @@ exports.getActiveShift = async (req, res) => {
 
         // Agrupar por método de pago
         sales.forEach(sale => {
-            sale.payments.forEach(payment => {
-                const methodName = payment.paymentMethod.name;
-                if (!metrics.byPaymentMethod[methodName]) {
-                    metrics.byPaymentMethod[methodName] = { count: 0, total: 0 };
-                }
-                metrics.byPaymentMethod[methodName].count++;
-                metrics.byPaymentMethod[methodName].total += Number(payment.amount);
-            });
+            if (sale.payments && Array.isArray(sale.payments)) {
+                sale.payments.forEach(payment => {
+                    const methodName = payment.paymentMethod?.name || 'Desconocido';
+                    if (!metrics.byPaymentMethod[methodName]) {
+                        metrics.byPaymentMethod[methodName] = { count: 0, total: 0 };
+                    }
+                    metrics.byPaymentMethod[methodName].count++;
+                    metrics.byPaymentMethod[methodName].total += Number(payment.amount);
+                });
+            }
         });
 
         res.json({
@@ -217,8 +219,8 @@ exports.closeShift = async (req, res) => {
             // 2. Registrar movimiento de cierre
             await tx.cashMovement.create({
                 data: {
-                    cashShiftId: id,
-                    userId,
+                    cashShift: { connect: { id: id } },
+                    user: { connect: { id: userId } },
                     type: 'OUT',
                     reason: 'CLOSING',
                     amount: counted,
@@ -284,8 +286,8 @@ exports.addMovement = async (req, res) => {
             // 1. Crear movimiento
             const movement = await tx.cashMovement.create({
                 data: {
-                    cashShiftId: id,
-                    userId,
+                    cashShift: { connect: { id: id } },
+                    user: { connect: { id: userId } },
                     type,
                     reason: reason || (isIncome ? 'DEPOSIT' : 'WITHDRAWAL'),
                     amount: movementAmount,
@@ -372,11 +374,13 @@ exports.getShiftsDashboard = async (req, res) => {
             // Desglose por método de pago para ESTE turno
             const byPaymentMethod = {};
             regularSales.forEach(sale => {
-                sale.payments.forEach(p => {
-                    const method = p.paymentMethod.name;
-                    if (!byPaymentMethod[method]) byPaymentMethod[method] = 0;
-                    byPaymentMethod[method] += Number(p.amount);
-                });
+                if (sale.payments && Array.isArray(sale.payments)) {
+                    sale.payments.forEach(p => {
+                        const method = p.paymentMethod?.name || 'Desconocido';
+                        if (!byPaymentMethod[method]) byPaymentMethod[method] = 0;
+                        byPaymentMethod[method] += Number(p.amount);
+                    });
+                }
             });
 
             return {
@@ -419,11 +423,13 @@ exports.getShiftsDashboard = async (req, res) => {
             const multiplier = isCreditNote ? -1 : 1;
 
             // Por Método de Pago
-            sale.payments.forEach(p => {
-                const method = p.paymentMethod.name;
-                if (!byPaymentMethod[method]) byPaymentMethod[method] = 0;
-                byPaymentMethod[method] += Number(p.amount) * multiplier;
-            });
+            if (sale.payments && Array.isArray(sale.payments)) {
+                sale.payments.forEach(p => {
+                    const method = p.paymentMethod?.name || 'Desconocido';
+                    if (!byPaymentMethod[method]) byPaymentMethod[method] = 0;
+                    byPaymentMethod[method] += Number(p.amount) * multiplier;
+                });
+            }
 
             // Por Caja
             if (sale.cashShift?.cashRegister) {
@@ -675,9 +681,26 @@ exports.getShiftDetails = async (req, res) => {
                     where: { status: 'COMPLETED' },
                     orderBy: { createdAt: 'desc' },
                     include: {
-                        items: true,
+                        items: {
+                            include: {
+                                product: {
+                                    select: {
+                                        name: true,
+                                        barcode: true,
+                                        sku: true
+                                    }
+                                }
+                            }
+                        },
                         payments: { include: { paymentMethod: true } },
-                        customer: { select: { firstName: true, lastName: true } }
+                        customer: {
+                            select: {
+                                firstName: true,
+                                lastName: true,
+                                documentType: true,
+                                documentNumber: true
+                            }
+                        }
                     }
                 }
             }
@@ -696,11 +719,13 @@ exports.getShiftDetails = async (req, res) => {
         const byPaymentMethod = {};
         shift.sales.forEach(sale => {
             const multiplier = sale.isCreditNote ? -1 : 1;
-            sale.payments.forEach(p => {
-                const method = p.paymentMethod.name;
-                if (!byPaymentMethod[method]) byPaymentMethod[method] = 0;
-                byPaymentMethod[method] += Number(p.amount) * multiplier;
-            });
+            if (sale.payments && Array.isArray(sale.payments)) {
+                sale.payments.forEach(p => {
+                    const method = p.paymentMethod?.name || 'Desconocido';
+                    if (!byPaymentMethod[method]) byPaymentMethod[method] = 0;
+                    byPaymentMethod[method] += Number(p.amount) * multiplier;
+                });
+            }
         });
 
         const detailedShift = {
@@ -740,9 +765,16 @@ exports.getHistory = async (req, res) => {
         const where = {};
 
         if (startDate && endDate) {
+            // Parse manual S-M-D para evitar confusion UTC/Local
+            const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+            const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+
+            const start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+            const end = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
+
             where.openedAt = {
-                gte: new Date(new Date(startDate).setHours(0, 0, 0, 0)),
-                lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+                gte: start,
+                lte: end
             };
         }
 

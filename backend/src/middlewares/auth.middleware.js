@@ -13,6 +13,7 @@ const authenticate = async (req, res, next) => {
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('❌ [Auth] Request sin token Bearer:', req.path);
             return res.status(401).json({
                 success: false,
                 error: 'No autorizado',
@@ -33,7 +34,8 @@ const authenticate = async (req, res, next) => {
             }
         });
 
-        if (!user || !user.isActive) {
+        if (!user) {
+            console.log('❌ [Auth] Usuario ID no encontrado en DB:', decoded.userId);
             return res.status(401).json({
                 success: false,
                 error: 'No autorizado',
@@ -41,10 +43,20 @@ const authenticate = async (req, res, next) => {
             });
         }
 
+        if (!user.isActive) {
+            console.log('❌ [Auth] Usuario inactivo:', user.username);
+            return res.status(401).json({
+                success: false,
+                error: 'No autorizado',
+                details: ['Usuario inactivo']
+            });
+        }
+
         // Adjuntar usuario al request
         req.user = user;
         next();
     } catch (error) {
+        console.log('❌ [Auth] Error verificando token:', error.message);
         if (error.name === 'TokenExpiredError') {
             return res.status(401).json({
                 success: false,
@@ -75,16 +87,39 @@ const authorize = (...requiredPermissions) => {
             });
         }
 
-        const userPermissions = req.user.role?.permissions || [];
+        let userPermissions = req.user.role?.permissions || [];
+
+        // Parsear permisos si vienen como string (MySQL Text vs JSON)
+        if (typeof userPermissions === 'string') {
+            try {
+                userPermissions = JSON.parse(userPermissions);
+            } catch (e) {
+                if (!userPermissions.includes('*')) {
+                    // Silent fail
+                }
+            }
+        }
+
+        // Asegurar que sea array para busquedas precisas si es posible, o string comp.
 
         // Admin tiene todos los permisos
-        if (userPermissions.includes('*') || req.user.role?.name === 'Administrador') {
+        // Aceptamos 'Admin' (del seed) y 'Administrador' (histórico)
+        const isAdmin =
+            (Array.isArray(userPermissions) && userPermissions.includes('*')) ||
+            (typeof userPermissions === 'string' && userPermissions.includes('*')) ||
+            req.user.role?.name === 'Administrador' ||
+            req.user.role?.name === 'Admin';
+
+        if (isAdmin) {
             return next();
         }
 
-        const hasPermission = requiredPermissions.some(p => userPermissions.includes(p));
+        const hasPermission = requiredPermissions.some(p =>
+            Array.isArray(userPermissions) ? userPermissions.includes(p) : userPermissions.includes(p)
+        );
 
         if (!hasPermission) {
+            console.log(`⛔ [Auth] Acceso denegado a ${req.user.username}. Requiere: ${requiredPermissions}. Tiene: ${JSON.stringify(userPermissions)}`);
             return res.status(403).json({
                 success: false,
                 error: 'Acceso denegado',

@@ -17,7 +17,7 @@ interface CashShift {
     id: string;
     shiftNumber: string;
     userId: string;
-    user?: { firstName: string; lastName: string };
+    user?: { firstName: string; lastName: string; avatar?: string };
     status: 'OPEN' | 'CLOSED' | 'PENDING_REVIEW';
     openedAt: string;
     closedAt?: string;
@@ -34,7 +34,7 @@ interface CashShift {
 interface DashboardStats {
     totalSales: number;
     totalDiff: number;
-    openShiftsCount: number | null; // null si no se pudo cargar
+    openShiftsCount: number | null;
 }
 
 // --- Main Component ---
@@ -51,6 +51,7 @@ export const CashDashboardPage = () => {
         start: new Date().toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     });
+    const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
 
     // Cargar datos
     const loadData = async () => {
@@ -220,7 +221,12 @@ export const CashDashboardPage = () => {
                                     ))
                                 ) : shifts.length > 0 ? (
                                     shifts.map((shift) => (
-                                        <tr key={shift.id} className="hover:bg-slate-50 transition-colors group cursor-default">
+                                        <tr
+                                            key={shift.id}
+                                            onClick={() => window.open(`/cash-details/${shift.id}`, '_blank')}
+                                            className="hover:bg-indigo-50/50 cursor-pointer transition-colors group"
+                                            title="Click para ver detalle completo en nueva pestaña"
+                                        >
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <StatusBadge status={shift.status} />
                                             </td>
@@ -229,8 +235,12 @@ export const CashDashboardPage = () => {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
-                                                        {shift.user?.firstName?.charAt(0) || 'U'}
+                                                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 overflow-hidden">
+                                                        {shift.user?.avatar ? (
+                                                            <img src={shift.user.avatar} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            shift.user?.firstName?.charAt(0) || 'U'
+                                                        )}
                                                     </div>
                                                     <span className="text-sm font-medium text-slate-700">
                                                         {shift.user ? `${shift.user.firstName} ${shift.user.lastName}` : 'Usuario eliminado'}

@@ -1,17 +1,14 @@
-/**
- * VARO POS - Página de Gestión de Mi Turno
- * Apertura, cierre y arqueo de turnos (Cash Shifts)
- */
-
 import { useState, useEffect } from 'react';
 import {
     Wallet, DollarSign, ArrowUpCircle, ArrowDownCircle,
     Clock, CheckCircle, XCircle, Plus, Minus,
-    RefreshCw, AlertTriangle, Monitor
+    RefreshCw, AlertTriangle, Monitor, Eye
 } from 'lucide-react';
 import { useConfigStore, themeColors } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/services/api';
+import { saleService } from '@/services/sale.service';
+import { SaleDetailsModal } from '@/components/modals/SaleDetailsModal';
 
 // Interfaces actualizadas para CashShift
 interface CashRegister {
@@ -30,6 +27,7 @@ interface CashMovement {
     balance: number;
     description?: string;
     createdAt: string;
+    saleId?: string;
 }
 
 interface ActiveShift {
@@ -66,6 +64,10 @@ export const CashRegisterPage = () => {
     const [movementType, setMovementType] = useState<'IN' | 'OUT'>('IN');
     const [summaryData, setSummaryData] = useState<any>(null);
 
+    // Ticket View State
+    const [selectedSale, setSelectedSale] = useState<any>(null);
+    const [showSaleModal, setShowSaleModal] = useState(false);
+
     useEffect(() => {
         loadActiveShift();
     }, []);
@@ -78,6 +80,31 @@ export const CashRegisterPage = () => {
             console.error('Error loading active shift:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleViewTicket = async (saleId: string) => {
+        try {
+            const saleData = await saleService.getById(saleId);
+            setSelectedSale(saleData.data || saleData); // Ajuste por si viene en data wrapper
+            setShowSaleModal(true);
+        } catch (error: any) {
+            console.error('Error loading ticket:', error);
+            const msg = error.response?.data?.error || error.message || 'Error desconocido';
+            alert(`No se pudo cargar el detalle del ticket: ${msg}`);
+        }
+    };
+
+    const handleVoidSale = async (saleData: any, reason: string) => {
+        try {
+            await saleService.createCreditNote(saleData.id, reason);
+            alert('Nota de Crédito generada exitosamente');
+            setShowSaleModal(false);
+            loadActiveShift();
+        } catch (error: any) {
+            console.error('Error voiding sale:', error);
+            const msg = error.response?.data?.error || error.message || 'Error desconocido';
+            alert(`Error al generar Nota de Crédito: ${msg}`);
         }
     };
 
@@ -225,7 +252,7 @@ export const CashRegisterPage = () => {
                         </div>
                         <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto">
                             {activeShift.movements.map(movement => (
-                                <div key={movement.id} className="p-4 flex items-center justify-between hover:bg-slate-50">
+                                <div key={movement.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
                                     <div className="flex items-center gap-3">
                                         <div className={`p-2 rounded-lg ${movement.type === 'IN'
                                             ? 'bg-emerald-100 text-emerald-600'
@@ -235,23 +262,36 @@ export const CashRegisterPage = () => {
                                         </div>
                                         <div>
                                             <p className="font-medium text-slate-800">
-                                                {movement.reason === 'SALE' ? 'Venta' :
-                                                    movement.reason === 'OPENING' ? 'Apertura de Turno' :
-                                                        movement.reason === 'CLOSING' ? 'Cierre de Turno' :
-                                                            movement.description || movement.reason}
+                                                {(movement.reason === 'SALE' && movement.description)
+                                                    ? movement.description
+                                                    : movement.reason === 'OPENING' ? 'Apertura de Turno'
+                                                        : movement.reason === 'CLOSING' ? 'Cierre de Turno'
+                                                            : movement.reason === 'SALE' ? 'Venta'
+                                                                : movement.description || movement.reason}
                                             </p>
                                             <p className="text-xs text-slate-500">
                                                 {new Date(movement.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className={`font-bold ${movement.type === 'IN' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                            {movement.type === 'IN' ? '+' : '-'}$ {Number(movement.amount).toLocaleString('es-AR')}
-                                        </p>
-                                        <p className="text-xs text-slate-500">
-                                            Saldo: $ {Number(movement.balance).toLocaleString('es-AR')}
-                                        </p>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-right">
+                                            <p className={`font-bold ${movement.type === 'IN' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                {movement.type === 'IN' ? '+' : '-'}$ {Number(movement.amount).toLocaleString('es-AR')}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                Saldo: $ {Number(movement.balance).toLocaleString('es-AR')}
+                                            </p>
+                                        </div>
+                                        {movement.saleId && (
+                                            <button
+                                                onClick={() => handleViewTicket(movement.saleId!)}
+                                                className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                                                title="Ver Ticket"
+                                            >
+                                                <Eye size={18} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -318,6 +358,17 @@ export const CashRegisterPage = () => {
                     onClose={() => setShowMovementModal(false)}
                     onSuccess={() => { setShowMovementModal(false); loadActiveShift(); }}
                     theme={theme}
+                />
+            )}
+
+            {showSaleModal && selectedSale && (
+                <SaleDetailsModal
+                    sale={selectedSale}
+                    onClose={() => setShowSaleModal(false)}
+                    onVoid={handleVoidSale}
+                    onPrint={() => {
+                        // El modal maneja la impresión interna si no se pasa handler
+                    }}
                 />
             )}
         </div>

@@ -63,6 +63,14 @@ export const cashService = {
             params: { page, limit, startDate, endDate }
         });
         return response.data;
+    },
+
+    /**
+     * Obtener detalles completos de un turno
+     */
+    async getShiftDetails(id: string) {
+        const response = await api.get(`/cash-shifts/${id}/details`);
+        return response.data;
     }
 };
 

@@ -16,7 +16,8 @@ import {
     Wallet,
     Gift,
     Activity,
-    ClipboardCheck
+    ClipboardCheck,
+    Shield
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useConfigStore, themeColors } from '@/stores/configStore';
@@ -30,6 +31,7 @@ const navItems = [
     { path: '/cash', icon: Wallet, label: 'Caja' },
     { path: '/cash-dashboard', icon: ClipboardCheck, label: 'Cajas y Turnos' },
     { path: '/reports', icon: BarChart3, label: 'Reportes' },
+    { path: '/users', icon: Shield, label: 'Usuarios' },
     { path: '/settings', icon: Settings, label: 'Config' },
 ];
 

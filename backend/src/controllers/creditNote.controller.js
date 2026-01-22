@@ -215,8 +215,8 @@ exports.createCreditNote = async (req, res) => {
 
                 await tx.cashMovement.create({
                     data: {
-                        cashShiftId: activeShift.id,
-                        userId,
+                        cashShift: { connect: { id: activeShift.id } },
+                        user: { connect: { id: userId } },
                         type: 'OUT',
                         reason: 'CREDIT_NOTE',
                         amount: totalNC,

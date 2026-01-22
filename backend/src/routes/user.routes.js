@@ -23,6 +23,18 @@ router.get('/', authorize('users.view'), userController.getAll);
 
 /**
  * @swagger
+ * /users/roles:
+ *   get:
+ *     tags: [Users]
+ *     summary: Listar roles disponibles
+ *     responses:
+ *       200:
+ *         description: Lista de roles
+ */
+router.get('/roles', authorize('users.view'), userController.getRoles);
+
+/**
+ * @swagger
  * /users/{id}:
  *   get:
  *     tags: [Users]
@@ -97,17 +109,5 @@ router.put('/:id', authorize('users.edit'), userController.update);
  *         description: Usuario eliminado
  */
 router.delete('/:id', authorize('users.delete'), userController.delete);
-
-/**
- * @swagger
- * /users/roles:
- *   get:
- *     tags: [Users]
- *     summary: Listar roles disponibles
- *     responses:
- *       200:
- *         description: Lista de roles
- */
-router.get('/roles', authorize('users.view'), userController.getRoles);
 
 module.exports = router;

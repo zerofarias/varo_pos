@@ -37,7 +37,8 @@ export const ProductRow = ({
     onToggleFav,
     theme,
     isSelected,
-    hasPromotion
+    hasPromotion,
+    domId
 }: {
     product: Product;
     onAdd: (p: Product) => void;
@@ -45,8 +46,10 @@ export const ProductRow = ({
     theme: typeof themeColors['indigo'];
     isSelected: boolean;
     hasPromotion: boolean;
+    domId?: string;
 }) => (
     <tr
+        id={domId}
         data-product-row
         onClick={() => onAdd(product)}
         className={`cursor-pointer transition-all group ${isSelected
@@ -103,7 +106,8 @@ export const ProductCard = ({
     onToggleFav,
     theme,
     isSelected,
-    hasPromotion
+    hasPromotion,
+    domId
 }: {
     product: Product;
     onAdd: (p: Product) => void;
@@ -111,14 +115,15 @@ export const ProductCard = ({
     theme: typeof themeColors['indigo'];
     isSelected: boolean;
     hasPromotion: boolean;
+    domId?: string;
 }) => (
     <div
-        data-product-row
+        id={domId}
         onClick={() => onAdd(product)}
-        className={`p-4 rounded-xl shadow-sm border flex justify-between items-center active:scale-[0.98] transition-all ${isSelected
-            ? `${theme.bg.replace('600', '100')} ring-2 ${theme.ring} border-transparent`
+        className={`p-4 rounded-xl border shadow-sm cursor-pointer transition-all active:scale-[0.98] ${isSelected
+            ? `${theme.bg.replace('600', '100')} border-indigo-300 ring-2 ${theme.ring}`
             : hasPromotion
-                ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
+                ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
                 : 'bg-white border-slate-200'
             }`}
     >
@@ -237,6 +242,7 @@ export const PaymentModal = ({
     onClose,
     processing,
     theme,
+    initialIsFiscal = false
 }: {
     total: number;
     paymentMethods: PaymentMethod[];
@@ -244,10 +250,11 @@ export const PaymentModal = ({
     onSelectMethod: (id: string) => void;
     amountTendered: string;
     onAmountChange: (val: string) => void;
-    onConfirm: (amount: number) => void;
+    onConfirm: (amount: number, isFiscal: boolean) => void;
     onClose: () => void;
     processing: boolean;
     theme: typeof themeColors['indigo'];
+    initialIsFiscal?: boolean;
 }) => {
     const selectedPayment = paymentMethods.find(m => m.id === selectedMethod);
     const surchargePercent = selectedPayment?.surchargePercent || 0;
@@ -258,6 +265,7 @@ export const PaymentModal = ({
     const tendered = parseFloat(amountTendered) || 0;
     const change = tendered - finalTotal;
     const amountInputRef = useRef<HTMLInputElement>(null);
+    const [isFiscal, setIsFiscal] = useState(initialIsFiscal);
 
     useEffect(() => {
         setTimeout(() => amountInputRef.current?.focus(), 100);
@@ -323,7 +331,7 @@ export const PaymentModal = ({
                                     className={`w-full pl-8 pr-4 py-4 text-2xl font-bold border-2 rounded-xl focus:outline-none ${theme.text} focus:border-current`}
                                     value={amountTendered}
                                     onChange={(e) => onAmountChange(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && onConfirm(finalTotal)}
+                                    onKeyDown={(e) => e.key === 'Enter' && onConfirm(finalTotal, isFiscal)}
                                 />
                             </div>
                             {change >= 0 && tendered > 0 && (
@@ -336,10 +344,27 @@ export const PaymentModal = ({
                             )}
                         </div>
                     )}
+
+                    {/* Checkbox Fiscal */}
+                    <div
+                        onClick={() => setIsFiscal(!isFiscal)}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${isFiscal ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                            }`}
+                    >
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isFiscal ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'
+                            }`}>
+                            {isFiscal && <CheckCircle size={14} className="text-white" />}
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-800">Factura Fiscal (AFIP)</p>
+                            <p className="text-[10px] text-slate-500">Emitir comprobante electrónico oficial</p>
+                        </div>
+                    </div>
+
                 </div>
                 <div className="p-5 border-t bg-slate-50">
                     <button
-                        onClick={() => onConfirm(finalTotal)}
+                        onClick={() => onConfirm(finalTotal, isFiscal)}
                         disabled={processing || (selectedPayment?.code === 'EFECTIVO' && tendered < finalTotal)}
                         className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg ${theme.bg} ${theme.hover} active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
                     >

@@ -12,10 +12,17 @@ interface ConfigState extends SystemConfig {
     setTicketFooter: (footer: string) => void;
     setAllowNegativeStock: (allow: boolean) => void;
     setDefaultPaymentMethod: (id: string) => void;
+
+    // Printer Settings
+    printOnSale: boolean;
+    printOnFiscal: boolean;
+    setPrintOnSale: (value: boolean) => void;
+    setPrintOnFiscal: (value: boolean) => void;
+
     updateConfig: (config: Partial<SystemConfig>) => void;
 }
 
-const defaultConfig: SystemConfig = {
+const defaultConfig: SystemConfig & { printOnSale: boolean; printOnFiscal: boolean } = {
     shopName: 'VARO POS',
     shopAddress: '',
     shopPhone: '',
@@ -23,6 +30,8 @@ const defaultConfig: SystemConfig = {
     themeColor: 'indigo',
     ticketFooter: '¡Gracias por su compra!',
     allowNegativeStock: false,
+    printOnSale: true,
+    printOnFiscal: true,
 };
 
 export const useConfigStore = create<ConfigState>()(
@@ -35,6 +44,9 @@ export const useConfigStore = create<ConfigState>()(
             setTicketFooter: (ticketFooter: string) => set({ ticketFooter }),
             setAllowNegativeStock: (allowNegativeStock: boolean) => set({ allowNegativeStock }),
             setDefaultPaymentMethod: (defaultPaymentMethodId: string) => set({ defaultPaymentMethodId }),
+
+            setPrintOnSale: (printOnSale: boolean) => set({ printOnSale }),
+            setPrintOnFiscal: (printOnFiscal: boolean) => set({ printOnFiscal }),
 
             updateConfig: (config: Partial<SystemConfig>) => set((state) => ({ ...state, ...config })),
         }),
