@@ -49,19 +49,24 @@ Incluir el token en el header: \`Authorization: Bearer <token>\`
             }
         ],
         tags: [
-            { name: 'Auth', description: 'Autenticación y autorización' },
-            { name: 'Users', description: 'Gestión de usuarios' },
-            { name: 'Products', description: 'Catálogo de productos' },
-            { name: 'Categories', description: 'Categorías de productos' },
-            { name: 'Sales', description: 'Gestión de ventas (POS)' },
-            { name: 'Customers', description: 'Clientes y cuentas corrientes' },
-            { name: 'Cash Register', description: 'Gestión de caja' },
-            { name: 'Promotions', description: 'Ofertas y promociones' },
-            { name: 'Stock', description: 'Movimientos de inventario' },
-            { name: 'Purchases', description: 'Compras a proveedores' },
-            { name: 'Sync', description: 'Sincronización Maestro/Cliente' },
-            { name: 'Reports', description: 'Reportes y estadísticas' },
-            { name: 'Settings', description: 'Configuración del sistema' }
+            { name: 'Auth', description: '🔐 Autenticación y autorización JWT' },
+            { name: 'Users', description: '👥 Gestión de usuarios y roles' },
+            { name: 'Products', description: '📦 Catálogo de productos y códigos de barras' },
+            { name: 'Categories', description: '🏷️ Categorías de productos' },
+            { name: 'Sales', description: '💰 Gestión de ventas (POS) y facturación' },
+            { name: 'Customers', description: '👤 Clientes y cuentas corrientes (fiado)' },
+            { name: 'Cash Register', description: '💵 Gestión de cajas y turnos' },
+            { name: 'Cash Shifts', description: '⏰ Turnos de caja y arqueos' },
+            { name: 'Payment Methods', description: '💳 Métodos de pago con recargos/descuentos' },
+            { name: 'Promotions', description: '🎯 Ofertas y promociones (2x1, combos, etc.)' },
+            { name: 'Stock', description: '📊 Movimientos de inventario y alertas' },
+            { name: 'AFIP', description: '🧾 Facturación electrónica AFIP (Argentina)' },
+            { name: 'Credit Notes', description: '↩️ Notas de crédito y anulaciones' },
+            { name: 'Supplier Returns', description: '📤 Devoluciones a proveedores' },
+            { name: 'Sync', description: '🔄 Sincronización Maestro/Cliente (multi-sucursal)' },
+            { name: 'Reports', description: '📈 Reportes y estadísticas de ventas' },
+            { name: 'Stats', description: '📊 Dashboard y métricas en tiempo real' },
+            { name: 'Settings', description: '⚙️ Configuración del sistema' }
         ],
         components: {
             securitySchemes: {
@@ -425,6 +430,156 @@ Incluir el token en el header: \`Authorization: Bearer <token>\`
                                 totalPages: { type: 'integer', example: 8 }
                             }
                         }
+                    }
+                },
+
+                // ==================== PAYMENT METHOD ====================
+                PaymentMethod: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        code: { type: 'string', example: 'EFECTIVO' },
+                        name: { type: 'string', example: 'Efectivo' },
+                        description: { type: 'string', example: 'Pago en efectivo' },
+                        surchargePercent: { type: 'number', example: 0, description: 'Recargo (ej: 5% tarjeta)' },
+                        discountPercent: { type: 'number', example: 0, description: 'Descuento (ej: 3% efectivo)' },
+                        requiresReference: { type: 'boolean', example: false },
+                        affectsCash: { type: 'boolean', example: true, description: 'Si afecta arqueo de efectivo' },
+                        isAccountPayment: { type: 'boolean', example: false, description: 'Si es cuenta corriente' },
+                        isActive: { type: 'boolean', example: true },
+                        sortOrder: { type: 'integer', example: 1 },
+                        icon: { type: 'string', example: 'banknote' },
+                        color: { type: 'string', example: '#10B981' }
+                    }
+                },
+
+                // ==================== CASH SHIFT ====================
+                CashShift: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        shiftNumber: { type: 'string', example: 'TURNO-20240122-001' },
+                        cashRegisterId: { type: 'string', format: 'uuid' },
+                        userId: { type: 'string', format: 'uuid' },
+                        status: { type: 'string', enum: ['OPEN', 'CLOSED', 'PENDING_REVIEW'] },
+                        openedAt: { type: 'string', format: 'date-time' },
+                        closedAt: { type: 'string', format: 'date-time', nullable: true },
+                        openingCash: { type: 'number', example: 5000.00, description: 'Efectivo inicial' },
+                        totalSales: { type: 'number', example: 45000.00 },
+                        totalCreditNotes: { type: 'number', example: 2500.00 },
+                        totalCashIn: { type: 'number', example: 35000.00 },
+                        totalCashOut: { type: 'number', example: 3500.00 },
+                        totalByCard: { type: 'number', example: 10000.00 },
+                        totalByQR: { type: 'number', example: 2500.00 },
+                        totalByAccount: { type: 'number', example: 5000.00 },
+                        expectedCash: { type: 'number', example: 36500.00, description: 'Efectivo esperado en caja' },
+                        countedCash: { type: 'number', example: 36450.00, nullable: true, description: 'Efectivo real contado' },
+                        cashDifference: { type: 'number', example: -50.00, nullable: true, description: 'Diferencia (faltante/sobrante)' },
+                        transactionCount: { type: 'integer', example: 87 },
+                        creditNoteCount: { type: 'integer', example: 3 },
+                        closingNotes: { type: 'string', nullable: true, example: 'Turno normal, pequeño faltante' }
+                    }
+                },
+                OpenShiftRequest: {
+                    type: 'object',
+                    required: ['cashRegisterId', 'openingCash'],
+                    properties: {
+                        cashRegisterId: { type: 'string', format: 'uuid', description: 'ID de la caja física' },
+                        openingCash: { type: 'number', example: 5000.00, description: 'Efectivo inicial con el que se abre' }
+                    }
+                },
+                CloseShiftRequest: {
+                    type: 'object',
+                    required: ['countedCash'],
+                    properties: {
+                        countedCash: { type: 'number', example: 36450.00, description: 'Efectivo real contado al cerrar' },
+                        closingNotes: { type: 'string', example: 'Todo OK' }
+                    }
+                },
+
+                // ==================== CREDIT NOTE ====================
+                CreditNote: {
+                    type: 'object',
+                    description: 'Nota de crédito (anulación de venta)',
+                    allOf: [{ $ref: '#/components/schemas/Sale' }],
+                    properties: {
+                        isCreditNote: { type: 'boolean', example: true },
+                        originalSaleId: { type: 'string', format: 'uuid', description: 'Venta original que se anula' },
+                        creditNoteReason: { type: 'string', example: 'Devolución por producto defectuoso' },
+                        documentType: { type: 'string', enum: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C', 'NOTA_CREDITO_X'] }
+                    }
+                },
+                CreateCreditNoteRequest: {
+                    type: 'object',
+                    required: ['reason'],
+                    properties: {
+                        reason: { type: 'string', example: 'Producto defectuoso', description: 'Motivo de la anulación' }
+                    }
+                },
+
+                // ==================== AFIP ====================
+                AFIPConfig: {
+                    type: 'object',
+                    properties: {
+                        cuit: { type: 'string', example: '20123456789' },
+                        razonSocial: { type: 'string', example: 'VARO POS SA' },
+                        puntoVenta: { type: 'integer', example: 1, description: 'Número de punto de venta AFIP' },
+                        certificado: { type: 'string', description: 'Certificado X509 (base64 o path)' },
+                        clavePrivada: { type: 'string', description: 'Clave privada (base64 o path)' },
+                        produccion: { type: 'boolean', example: false, description: 'true = Producción, false = Homologación' }
+                    }
+                },
+                AFIPVoucherRequest: {
+                    type: 'object',
+                    required: ['saleId', 'tipo', 'puntoVenta'],
+                    properties: {
+                        saleId: { type: 'string', format: 'uuid', description: 'ID de la venta a facturar' },
+                        tipo: { type: 'integer', example: 6, description: 'Tipo comprobante AFIP (1=A, 6=B, 11=C, 3=NCA, 8=NCB, 13=NCC)' },
+                        puntoVenta: { type: 'integer', example: 1 },
+                        voucherAssoc: {
+                            type: 'object',
+                            description: 'Comprobante asociado (obligatorio para NCs)',
+                            properties: {
+                                type: { type: 'integer', example: 6 },
+                                salesPoint: { type: 'integer', example: 1 },
+                                number: { type: 'integer', example: 123 }
+                            }
+                        }
+                    }
+                },
+                AFIPVoucherResponse: {
+                    type: 'object',
+                    properties: {
+                        success: { type: 'boolean', example: true },
+                        data: {
+                            type: 'object',
+                            properties: {
+                                cae: { type: 'string', example: '72081234567890' },
+                                caeExpiration: { type: 'string', example: '20240131' },
+                                voucherNumber: { type: 'integer', example: 124 },
+                                salesPoint: { type: 'integer', example: 1 },
+                                qrData: { type: 'string', description: 'JSON para generar QR AFIP' }
+                            }
+                        }
+                    }
+                },
+
+                // ==================== SUPPLIER RETURN ====================
+                SupplierReturn: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        returnNumber: { type: 'string', example: 'REM-DEV-001' },
+                        supplierId: { type: 'string', format: 'uuid' },
+                        branchId: { type: 'string', format: 'uuid' },
+                        userId: { type: 'string', format: 'uuid' },
+                        returnType: { type: 'string', enum: ['DEFECTIVE', 'EXPIRED', 'DAMAGED', 'OTHER'], example: 'DEFECTIVE' },
+                        totalItems: { type: 'integer', example: 10 },
+                        totalValue: { type: 'number', example: 5000.00, description: 'Valor estimado (NO afecta caja)' },
+                        status: { type: 'string', enum: ['pending', 'approved', 'completed', 'cancelled'], example: 'pending' },
+                        notes: { type: 'string', nullable: true },
+                        supplierRef: { type: 'string', nullable: true, example: 'REF-PROV-123' },
+                        createdAt: { type: 'string', format: 'date-time' }
                     }
                 }
             },

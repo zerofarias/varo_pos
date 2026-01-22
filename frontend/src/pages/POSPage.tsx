@@ -112,7 +112,25 @@ export const POSPage = () => {
 
             const safeMethods = Array.isArray(methodsRes) ? methodsRes : (methodsRes as any).data || [];
 
-            setCategories(categoriesRes);
+            // Gestión de Categoría por Defecto
+            let validCategories = categoriesRes;
+            let defaultCategory = validCategories.find(c => c.name === 'General' || c.name === 'Varios');
+
+            if (!defaultCategory) {
+                if (validCategories.length === 0) {
+                    try {
+                        const newCat = await productService.createCategory({ name: 'General', description: 'Categoría por defecto' });
+                        validCategories = [newCat];
+                        defaultCategory = newCat;
+                    } catch (e) {
+                        console.error('Error auto-creating category', e);
+                    }
+                } else {
+                    defaultCategory = validCategories[0];
+                }
+            }
+
+            setCategories(validCategories);
             setPaymentMethods(safeMethods);
 
             if (safeMethods.length > 0) {
@@ -128,6 +146,53 @@ export const POSPage = () => {
 
             // Carga inicial de productos
             await searchProducts('', null);
+
+            // Garantizar existencia de producto Genérico (VARIOS)
+            try {
+                const genericRes = await productService.getAll({ search: 'VARIOS', active: true, limit: 10 });
+                let generic = genericRes.data.find(p => p.sku === 'VARIOS');
+
+                if (!generic) {
+                    // Validar que tengamos categoría antes de intentar crear
+                    if (!defaultCategory) {
+                        console.warn('⚠️ No hay categorías disponibles. El producto genérico no se puede crear.');
+                        console.warn('Por favor cree al menos una categoría desde el panel de administración.');
+                        // No bloquear el POS, solo advertir
+                    } else {
+                        try {
+                            console.log('Producto genérico no encontrado. Creando automáticamente...');
+                            console.log('Usando categoría:', defaultCategory.name, '(ID:', defaultCategory.id, ')');
+
+                            generic = await productService.create({
+                                name: 'Varios / Genérico',
+                                sku: 'VARIOS',
+                                description: 'Producto para ventas por monto directo',
+                                salePrice: 1, // Valor simbólico (se sobrescribe al usar /monto)
+                                costPrice: 0,
+                                stockGlobal: 99999,
+                                isService: true,
+                                isGeneric: true,
+                                isActive: true,
+                                manageStock: false,
+                                allowNegativeStock: true,
+                                stockStatus: 'ok',
+                                taxRate: 21,
+                                categoryId: defaultCategory.id
+                            } as any);
+
+                            console.log('✅ Producto genérico creado exitosamente');
+                        } catch (createErr: any) {
+                            console.error('❌ Error creating generic product:', createErr);
+                            console.error('Server response:', createErr.response?.data);
+                            console.error('Validation details:', createErr.response?.data?.details);
+                            console.error('Status:', createErr.response?.status);
+                        }
+                    }
+                }
+                if (generic) setGenericProductTemplate(generic);
+            } catch (err) {
+                console.error('Error initializing generic product:', err);
+            }
 
         } catch (error) {
             console.error('Error loading initial data:', error);
@@ -187,9 +252,11 @@ export const POSPage = () => {
 
     // Detectar comando de producto genérico (/400 = $400)
     const genericProductMatch = useMemo(() => {
-        const match = searchTerm.match(/^\/(\d+(?:\.\d{1,2})?)$/);
+        // Regex mejorado: permite espacios (\s*) y decimales con punto o coma
+        const match = searchTerm.match(/^\/\s*(\d+(?:[.,]\d{1,2})?)\s*$/);
         if (match) {
-            return parseFloat(match[1]);
+            // Reemplazar coma por punto para parsing correcto
+            return parseFloat(match[1].replace(',', '.'));
         }
         return null;
     }, [searchTerm]);
@@ -246,6 +313,12 @@ export const POSPage = () => {
 
                 // 1. Si es comando de producto genérico (/400)
                 if (genericProductMatch !== null && genericProductMatch > 0) {
+                    if (!genericProductTemplate) {
+                        showToast('Error', 'Sistema inicializando... Intenta nuevamente en unos segundos.', 'error');
+                        // Intentar recargar en segundo plano por si las moscas
+                        loadInitialData();
+                        return;
+                    }
                     const genericProduct = createGenericProduct(genericProductMatch);
                     handleAddToCart(genericProduct);
                     return;

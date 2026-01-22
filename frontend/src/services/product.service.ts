@@ -68,6 +68,11 @@ export const productService = {
         return response.data.data;
     },
 
+    async createCategory(data: Partial<Category>): Promise<Category> {
+        const response = await api.post<ApiResponse<Category>>('/categories', data);
+        return response.data.data;
+    },
+
     async getCategories(): Promise<Category[]> {
         const response = await api.get<ApiResponse<Category[]>>('/categories');
         return response.data.data;
